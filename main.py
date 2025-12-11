@@ -11,7 +11,10 @@ from rich.console import Console
 from rich.text import Text
 
 console = Console()
-
+if getattr(sys, 'frozen', False):
+    PROGRAM_PATH = Path(sys.executable).parent
+else:
+    PROGRAM_PATH = Path(__file__).parent
 
 def full_width_line(char: str = "=") -> str:
     width = max(console.size.width, 10)
@@ -163,7 +166,7 @@ def main():
         console.print(full_width_line("-"), style="blue")
     
     if not MODS_DIR:
-        mods_dir = Path("Mods").absolute()
+        mods_dir = Path(PROGRAM_PATH).absolute() / "Mods"
         mods_dir.mkdir(parents=True, exist_ok=True)
         MODS_DIR = mods_dir.as_posix()
         config.set_mods_dir(MODS_DIR)
