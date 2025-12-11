@@ -49,38 +49,67 @@ def status_text(status: bool) -> Text:
     style = "bold green" if status else "bold red"
     return Text("Enabled" if status else "Disabled", style=style)
 
+class ConfigOption:
+    def __init__(self, config_parent, section: str, option: str, default: str, type_func=str):
+        self.config_parent = config_parent # เก็บตัวแม่ไว้เรียก save
+        self.section = section
+        self.option = option
+        self.default = default
+        self.type_func = type_func # ตัวแปลง type เช่น str, bool, int
+
+    def get(self):
+        """ดึงค่าล่าสุดจากไฟล์"""
+        val = self.config_parent.config.get(self.section, self.option, fallback=self.default)
+        
+        # จัดการเรื่อง Boolean เป็นพิเศษ เพราะ configparser เก็บเป็น string
+        if self.type_func == bool:
+            return str(val).lower() in ('true', 'yes', '1', 'on')
+            
+        return self.type_func(val)
+
+    def set(self, value):
+        """บันทึกค่าลงไฟล์"""
+        if not self.config_parent.config.has_section(self.section):
+            self.config_parent.config.add_section(self.section)
+            
+        self.config_parent.config.set(self.section, self.option, str(value))
+        self.config_parent._save_config()
+
+    # --- Magic Methods เพื่อให้ใช้งานได้เหมือนตัวแปรปกติ ---
+    
+    def __call__(self):
+        """ถ้าเรียกเป็นฟังก์ชัน config.Option() ให้คืนค่า"""
+        return self.get()
+
+    def __bool__(self):
+        """ถ้าเอาไปใส่ if config.Option: ให้เช็คค่า bool"""
+        return bool(self.get())
+
+    def __str__(self):
+        """ถ้าสั่ง print(config.Option) ให้แสดงค่า"""
+        return str(self.get())
+        
+    def __eq__(self, other):
+        """เปรียบเทียบค่าได้เลย if config.Option == True:"""
+        return self.get() == other
+
 class Config:
     def __init__(self, config_file: str = 'config.ini'):
         self.config = configparser.ConfigParser()
         self.config_file = config_file
         self._load_config()
-    
-    def get_game_exe_path(self):
-        return self.config.get('Directory', 'game_exe_path', fallback=None)
-    
-    def set_game_exe_path(self, path: str):
-        if not self.config.has_section('Directory'):
-            self.config.add_section('Directory')
-        self.config.set('Directory', 'game_exe_path', path)
-        self._save_config()
-
-    def get_mods_dir(self):
-        return self.config.get('Directory', 'mods_dir', fallback=None)
-    
-    def set_mods_dir(self, path: str):
-        if not self.config.has_section('Directory'):
-            self.config.add_section('Directory')
-        self.config.set('Directory', 'mods_dir', path)
-        self._save_config()
-
-    def get_setting_value(self, option: str):
-        return self.config.get('Settings', option, fallback=None)
-    
-    def set_setting_value(self, option: str, value: str):
-        if not self.config.has_section('Settings'):
-            self.config.add_section('Settings')
-        self.config.set('Settings', option, value)
-        self._save_config()
+        
+        # --- กำหนด Setting ต่างๆ ตรงนี้ (Class ซ้อน Class แบบที่นายอยากได้) ---
+        
+        # แบบ String
+        self.GameExePath = ConfigOption(self, 'Directory', 'game_exe_path', '')
+        self.ModsDir = ConfigOption(self, 'Directory', 'mods_dir', '')
+        self.TargetExeName = ConfigOption(self, 'Settings', 'target_exe_name', 'StellaSora.exe')
+        self.ModExtension = ConfigOption(self, 'Settings', 'mod_extension', '.unity3d')
+        
+        # แบบ Boolean (ใส่ type_func=bool)
+        self.RestoreModsWhenClose = ConfigOption(self, 'Settings', 'restore_when_close', 'True', type_func=bool)
+        self.HideConsoleWhenRunning = ConfigOption(self, 'Settings', 'hide_console', 'True', type_func=bool)
 
     def _load_config(self):
         self.config.read(self.config_file)
@@ -90,15 +119,17 @@ class Config:
             self.config.write(configfile)
 
 class StellaSoraModLoader:
-    def __init__(self, game_resource_dir: Path, mods_dir: Path) -> None:
+    def __init__(self, game_resource_dir: Path, mods_dir: Path, mod_extension: str) -> None:
         self.game_resource_dir = game_resource_dir
         self.mods_dir = mods_dir
+        self.mod_extension = mod_extension
         self.mods_list = self.get_mods_list()
     
     def get_mods_list(self) -> list[Path]:
+        pattern = f"*{self.mod_extension}"
         return [
             mod_file
-            for mod_file in self.mods_dir.rglob('*.unity3d')
+            for mod_file in self.mods_dir.rglob(pattern)
             if not self._is_disabled_path(mod_file)
         ]
 
@@ -197,14 +228,17 @@ class StellaSoraGame:
 def main():
     config_file = 'config.ini'
     config = Config(config_file)
-    GAME_EXE_PATH = config.get_game_exe_path()
-    MODS_DIR = config.get_mods_dir()
-    RESTORE_WHEN_CLOSE = config.get_setting_value('restore_when_close')
+    GAME_EXE_PATH = config.GameExePath()
+    TARGET_EXE_NAME = config.TargetExeName()
+    MODS_DIR = config.ModsDir()
+    MOD_EXTENSION = config.ModExtension()
+    RESTORE_MODS_WHEN_CLOSE = config.RestoreModsWhenClose()
+    HIDE_CONSOLE_WHEN_RUNNUNG = config.HideConsoleWhenRunning()
     
-    if not GAME_EXE_PATH or not Path(GAME_EXE_PATH).exists() or "stellasora.exe" not in GAME_EXE_PATH.lower():
+    if not GAME_EXE_PATH or not Path(GAME_EXE_PATH).exists() or TARGET_EXE_NAME.lower() not in GAME_EXE_PATH.lower():
         console.print(full_width_line("-"), style="blue")
         console.print("Game executable path missing or not valid, please select the game executable", style="bold bright_blue")
-        GAME_EXE_PATH = filedialog.askopenfilename(filetypes=[("StellaSora.exe", "StellaSora.exe")])
+        GAME_EXE_PATH = filedialog.askopenfilename(filetypes=[(TARGET_EXE_NAME, TARGET_EXE_NAME)])
         config.set_game_exe_path(GAME_EXE_PATH)
         clear_line()
         console.print(Text(f"Game executable path set to ", style="bright_blue") + Text(GAME_EXE_PATH, style="yellow"))
@@ -219,29 +253,29 @@ def main():
         console.print(Text(f"Using default directory: ", style="bright_blue") + Text(MODS_DIR, style="yellow"))
         console.print(full_width_line("-"), style="blue")
     
-    if RESTORE_WHEN_CLOSE is None:
+    if RESTORE_MODS_WHEN_CLOSE is None:
         console.print("Do you need to restore the original files when game is closed?", style="bold bright_blue")
         console.print("  - [Y] Yes, restore the original files when game is closed (recommended)", style="yellow")
         console.print("  - [N] No, do not restore the original files when game is closed", style="yellow")
         console.print("  - Default is Enabled", style="bold yellow")
-        RESTORE_WHEN_CLOSE = input("Enter your choice: ")
-        if RESTORE_WHEN_CLOSE.lower() == "y":
-            RESTORE_WHEN_CLOSE = True
-        elif RESTORE_WHEN_CLOSE.lower() == "n":
-            RESTORE_WHEN_CLOSE = False
-        elif RESTORE_WHEN_CLOSE.lower() == "":
-            RESTORE_WHEN_CLOSE = True
+        RESTORE_MODS_WHEN_CLOSE = input("Enter your choice: ")
+        if RESTORE_MODS_WHEN_CLOSE.lower() == "y":
+            RESTORE_MODS_WHEN_CLOSE = True
+        elif RESTORE_MODS_WHEN_CLOSE.lower() == "n":
+            RESTORE_MODS_WHEN_CLOSE = False
+        elif RESTORE_MODS_WHEN_CLOSE.lower() == "":
+            RESTORE_MODS_WHEN_CLOSE = True
         else:
             console.print("Invalid choice, default is Enabled", style="yellow")
-            RESTORE_WHEN_CLOSE = True
-        config.set_setting_value('restore_when_close', str(RESTORE_WHEN_CLOSE))
+            RESTORE_MODS_WHEN_CLOSE = True
+        config.set_setting_value('restore_when_close', str(RESTORE_MODS_WHEN_CLOSE))
         clear_line()
         console.print(
             Text("Restore when game is closed set to ", style="bright_blue")
-            + status_text(RESTORE_WHEN_CLOSE)
+            + status_text(RESTORE_MODS_WHEN_CLOSE)
         )
         console.print()
-    RESTORE_WHEN_CLOSE = bool(RESTORE_WHEN_CLOSE)
+    RESTORE_MODS_WHEN_CLOSE = bool(RESTORE_MODS_WHEN_CLOSE)
     
     console.rule(Text("Configuration", style="bold"), style="white")
     console.rule(Text(f"You can change settings in the {config_file} file", style="green"), characters=" ")
@@ -249,9 +283,9 @@ def main():
     console.print(full_width_line("─"))
     console.print(Text("Game executable path: ", style="bright_blue") + Text(GAME_EXE_PATH, style="yellow"))
     console.print(Text("Mods directory: ", style="bright_blue") + Text(MODS_DIR, style="yellow"))
-    console.print(Text("Restore when game is closed: ", style="bright_blue") + status_text(RESTORE_WHEN_CLOSE))
+    console.print(Text("Restore when game is closed: ", style="bright_blue") + status_text(RESTORE_MODS_WHEN_CLOSE))
     
-    loader = StellaSoraModLoader(Path(GAME_EXE_PATH).parent, Path(MODS_DIR))
+    loader = StellaSoraModLoader(Path(GAME_EXE_PATH).parent, Path(MODS_DIR), MOD_EXTENSION)
     mods_list = loader.get_mods_list()
     
     game = StellaSoraGame(Path(GAME_EXE_PATH))
@@ -268,7 +302,7 @@ def main():
     console.rule(Text("Start Game", style="bold"), style="white")
     console.print("Starting game...", style="bold green")
     game.start()
-    if not RESTORE_WHEN_CLOSE:
+    if not RESTORE_MODS_WHEN_CLOSE:
         console.print("Mods will not be restored when game isclosed, program will exit...", style="bold yellow")
         input("Press Enter to exit...")
         return
@@ -283,11 +317,15 @@ def main():
     console.print(full_width_line("─"))
 
     time.sleep(1)
-    hide_console()
+    
+    if HIDE_CONSOLE_WHEN_RUNNUNG:
+        hide_console()
 
     game.wait_for_game_closed()
 
-    show_console()
+    if HIDE_CONSOLE_WHEN_RUNNUNG:
+        show_console()
+
     time.sleep(1)
 
     clear_line(2)
