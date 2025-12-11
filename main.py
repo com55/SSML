@@ -22,7 +22,7 @@ console = Console()
 _nuitka_onefile_parent = os.environ.get("NUITKA_ONEFILE_PARENT")
 if _nuitka_onefile_parent:
     # Nuitka onefile mode: NUITKA_ONEFILE_PARENT points to the exe's directory
-    PROGRAM_PATH = Path(_nuitka_onefile_parent)
+    PROGRAM_PATH = Path(_nuitka_onefile_parent).parent
 elif getattr(sys, 'frozen', False):
     # PyInstaller
     PROGRAM_PATH = Path(sys.executable).parent
