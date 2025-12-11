@@ -61,7 +61,10 @@ class ConfigOption:
     def get(self):
         """ดึงค่าล่าสุดจากไฟล์"""
         val = self.config_parent.config.get(self.section, self.option, fallback=self.default)
-        
+
+        if val is None:
+            return None
+
         # จัดการเรื่อง Boolean เป็นพิเศษ เพราะ configparser เก็บเป็น string
         if self.type_func == bool:
             return str(val).lower() in ('true', 'yes', '1', 'on')
@@ -103,13 +106,13 @@ class Config:
         # --- กำหนด Setting ต่างๆ ตรงนี้ (Class ซ้อน Class แบบที่นายอยากได้) ---
         
         # แบบ String
-        self.GameExePath = ConfigOption(self, 'Directory', 'game_exe_path', '')
-        self.ModsDir = ConfigOption(self, 'Directory', 'mods_dir', '')
+        self.GameExePath = ConfigOption(self, 'Directory', 'game_exe_path', None)
+        self.ModsDir = ConfigOption(self, 'Directory', 'mods_dir', None)
         self.TargetExeName = ConfigOption(self, 'Settings', 'target_exe_name', 'StellaSora.exe')
         self.ModExtension = ConfigOption(self, 'Settings', 'mod_extension', '.unity3d')
         
         # แบบ Boolean (ใส่ type_func=bool)
-        self.RestoreModsWhenClose = ConfigOption(self, 'Settings', 'restore_when_close', 'True', type_func=bool)
+        self.RestoreOriginalFileWhenGameClosed = ConfigOption(self, 'Settings', 'restore_when_close', None, type_func=bool)
         self.HideConsoleWhenRunning = ConfigOption(self, 'Settings', 'hide_console', 'True', type_func=bool)
 
     def _load_config(self):
@@ -233,8 +236,8 @@ def main():
     TARGET_EXE_NAME = config.TargetExeName()
     MODS_DIR = config.ModsDir()
     MOD_EXTENSION = config.ModExtension()
-    RESTORE_MODS_WHEN_CLOSE = config.RestoreModsWhenClose()
-    HIDE_CONSOLE_WHEN_RUNNUNG = config.HideConsoleWhenRunning()
+    RESTORE_ORIGINAL_FILE_WHEN_CLOSED = config.RestoreOriginalFileWhenGameClosed()
+    HIDE_CONSOLE_WHEN_RUNNING = config.HideConsoleWhenRunning()
     
     if not GAME_EXE_PATH or not Path(GAME_EXE_PATH).exists() or TARGET_EXE_NAME.lower() not in GAME_EXE_PATH.lower():
         console.print(full_width_line("-"), style="blue")
@@ -254,38 +257,41 @@ def main():
         console.print(Text(f"Using default directory: ", style="bright_blue") + Text(MODS_DIR, style="yellow"))
         console.print(full_width_line("-"), style="blue")
     
-    if RESTORE_MODS_WHEN_CLOSE is None:
+    if RESTORE_ORIGINAL_FILE_WHEN_CLOSED is None:
         console.print("Do you need to restore the original files when game is closed?", style="bold bright_blue")
         console.print("  - [Y] Yes, restore the original files when game is closed (recommended)", style="yellow")
         console.print("  - [N] No, do not restore the original files when game is closed", style="yellow")
         console.print("  - Default is Enabled", style="bold yellow")
-        RESTORE_MODS_WHEN_CLOSE = input("Enter your choice: ")
-        if RESTORE_MODS_WHEN_CLOSE.lower() == "y":
-            RESTORE_MODS_WHEN_CLOSE = True
-        elif RESTORE_MODS_WHEN_CLOSE.lower() == "n":
-            RESTORE_MODS_WHEN_CLOSE = False
-        elif RESTORE_MODS_WHEN_CLOSE.lower() == "":
-            RESTORE_MODS_WHEN_CLOSE = True
+        RESTORE_ORIGINAL_FILE_WHEN_CLOSED = input("Enter your choice: ")
+        if RESTORE_ORIGINAL_FILE_WHEN_CLOSED.lower() == "y":
+            RESTORE_ORIGINAL_FILE_WHEN_CLOSED = True
+        elif RESTORE_ORIGINAL_FILE_WHEN_CLOSED.lower() == "n":
+            RESTORE_ORIGINAL_FILE_WHEN_CLOSED = False
+        elif RESTORE_ORIGINAL_FILE_WHEN_CLOSED.lower() == "":
+            RESTORE_ORIGINAL_FILE_WHEN_CLOSED = True
         else:
             console.print("Invalid choice, default is Enabled", style="yellow")
-            RESTORE_MODS_WHEN_CLOSE = True
-        config.RestoreModsWhenClose.set(RESTORE_MODS_WHEN_CLOSE)
+            RESTORE_ORIGINAL_FILE_WHEN_CLOSED = True
+        config.RestoreOriginalFileWhenGameClosed.set(RESTORE_ORIGINAL_FILE_WHEN_CLOSED)
         clear_line()
         console.print(
-            Text("Restore when game is closed set to ", style="bright_blue")
-            + status_text(RESTORE_MODS_WHEN_CLOSE)
+            Text("Restore original files when game is closed set to ", style="bright_blue")
+            + status_text(RESTORE_ORIGINAL_FILE_WHEN_CLOSED)
         )
         console.print()
-    RESTORE_MODS_WHEN_CLOSE = bool(RESTORE_MODS_WHEN_CLOSE)
+    RESTORE_ORIGINAL_FILE_WHEN_CLOSED = bool(RESTORE_ORIGINAL_FILE_WHEN_CLOSED)
     
     console.rule(Text("Configuration", style="bold"), style="white")
     console.rule(Text(f"You can change settings in the {config_file} file", style="green"), characters=" ")
     console.rule(Text("Or delete it to restart the configuration wizard.", style="green"), characters=" ")
     console.print(full_width_line("─"))
     console.print(Text("Game executable path: ", style="bright_blue") + Text(GAME_EXE_PATH, style="yellow"))
+    console.print(Text("Target executable name: ", style="bright_blue") + Text(TARGET_EXE_NAME, style="yellow"))
     console.print(Text("Mods directory: ", style="bright_blue") + Text(MODS_DIR, style="yellow"))
-    console.print(Text("Restore when game is closed: ", style="bright_blue") + status_text(RESTORE_MODS_WHEN_CLOSE))
-    
+    console.print(Text("Mods extension: ", style="bright_blue") + Text(MOD_EXTENSION, style="yellow"))
+    console.print(Text("Restore original files when game is closed: ", style="bright_blue") + status_text(RESTORE_ORIGINAL_FILE_WHEN_CLOSED))
+    console.print(Text("Hide console windows when running: ", style="bright_blue") + status_text(HIDE_CONSOLE_WHEN_RUNNING))
+
     loader = StellaSoraModLoader(Path(GAME_EXE_PATH).parent, Path(MODS_DIR), MOD_EXTENSION)
     mods_list = loader.get_mods_list()
     
@@ -303,8 +309,8 @@ def main():
     console.rule(Text("Start Game", style="bold"), style="white")
     console.print("Starting game...", style="bold green")
     game.start()
-    if not RESTORE_MODS_WHEN_CLOSE:
-        console.print("Mods will not be restored when game isclosed, program will exit...", style="bold yellow")
+    if not RESTORE_ORIGINAL_FILE_WHEN_CLOSED:
+        console.print("Mods will not be restored when game is closed, program will exit...", style="bold yellow")
         input("Press Enter to exit...")
         return
     
@@ -319,12 +325,12 @@ def main():
 
     time.sleep(1)
 
-    if HIDE_CONSOLE_WHEN_RUNNUNG:
+    if HIDE_CONSOLE_WHEN_RUNNING:
         hide_console()
 
     game.wait_for_game_closed()
 
-    if HIDE_CONSOLE_WHEN_RUNNUNG:
+    if HIDE_CONSOLE_WHEN_RUNNING:
         show_console()
 
     time.sleep(1)
