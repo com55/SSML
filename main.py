@@ -8,8 +8,10 @@ import time
 import psutil
 import subprocess
 import sys
+from threading import Thread
+import msvcrt
 from tkinter import filedialog
-from typing import Callable, Generic, TypeVar, cast
+from typing import Any, Callable, Generic, TypeVar, cast
 from rich.console import Console
 from rich.text import Text
 
@@ -39,6 +41,47 @@ def show_console():
             ctypes.windll.user32.ShowWindow(hwnd, 5) 
     except Exception:
         pass
+
+def minimize_to_tray() -> Any:
+    """
+    ย่อคอนโซลลง system tray พร้อมเมนูเปิดหน้าต่าง / ออกโปรแกรม
+    ถ้าไม่มี pystray/Pillow จะ fallback เป็นการซ่อนคอนโซลเฉยๆ
+    """
+    try:
+        import pystray  # type: ignore
+        from PIL import Image  # type: ignore
+    except ImportError:
+        hide_console()
+        return None
+
+    hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+    if not hwnd:
+        return None
+
+    def load_icon_image() -> Any:
+        icon_path = PROGRAM_PATH / "icon.ico"
+        if icon_path.exists():
+            return Image.open(icon_path)
+        return Image.new("RGB", (64, 64), (0, 170, 255))
+
+    def on_restore(icon: Any, _item: Any) -> None:
+        show_console()
+        icon.stop()
+
+    menu = pystray.Menu(
+        pystray.MenuItem("Show console", on_restore),
+    )
+
+    icon = pystray.Icon(
+        "StellaSoraModLoader",
+        load_icon_image(),
+        "StellaSora Mod Loader - Waiting for game to close...",
+        menu=menu,
+    )
+
+    ctypes.windll.user32.ShowWindow(hwnd, 0)  # ซ่อนหน้าต่างคอนโซล
+    Thread(target=icon.run, daemon=True).start()
+    return icon
 
 def full_width_line(char: str = "=") -> str:
     width = max(console.size.width, 10)
@@ -318,7 +361,7 @@ def main():
     console.print("Mods installed successfully", style="bold green")
     
     console.rule(Text("Start Game", style="bold"), style="white")
-    console.rule(Text("Starting game...", style="bold green"), characters=" ")
+    console.rule(Text("Game status: ", style="bright_blue") + Text("Starting game...", style="bold green"), characters=" ")
     game.start()
     if not RESTORE_ORIGINAL_FILE_WHEN_CLOSED:
         console.print("Mods will not be restored when game is closed, program will exit...", style="bold yellow")
@@ -330,30 +373,57 @@ def main():
     
     clear_line()
     console.rule(Text("Game status: ", style="bright_blue") + Text("Running", style="bold green"), characters=" ")
-    console.rule(Text("Please do not close the program", style="bold yellow"), characters=" ")
+    console.rule(Text("Please do not close this window", style="bold yellow"), characters=" ")
     console.rule(Text("Waiting for the restore after the game is closed...", style="bold yellow"), characters=" ")
     console.print(full_width_line("─"))
 
     time.sleep(3)
 
+    tray_icon = None
     if HIDE_CONSOLE_WHEN_RUNNING:
-        hide_console()
+        tray_icon = minimize_to_tray()
 
     game.wait_for_game_closed()
 
     if HIDE_CONSOLE_WHEN_RUNNING:
         show_console()
-
-    time.sleep(1)
+        if tray_icon:
+            try:
+                tray_icon.stop()
+            except Exception:
+                pass
 
     clear_line(4)
     console.rule(Text("Game status: ", style="bright_blue") + Text("Game closed detected", style="bold red"), characters=" ")
+    console.print(full_width_line("─"))
     
+    time.sleep(1)
+    
+    clear_line()
     console.rule(Text("Restore Original Files", style="bold"), style="white")
     loader.restore_all()
     console.print("Mods restored successfully", style="bold green")
     console.print(full_width_line("─"))
-    console.print("Program will exit...", style="bold yellow")
-
+    
+    # Countdown with abort option
+    aborted = False
+    for i in range(5, 0, -1):
+        console.print(f"Program will exit in {i} seconds, press any key to abort exit...", style="bold yellow")
+        # Wait 1 second but check for keypress every 100ms
+        for _ in range(10):
+            time.sleep(0.1)
+            if msvcrt.kbhit():
+                msvcrt.getch()  # clear the key from buffer
+                aborted = True
+                break
+        clear_line()
+        if aborted:
+            break
+    
+    if aborted:
+        console.print("Exit aborted. Press Enter to close the program...", style="bold green")
+        input()
+    
+    sys.exit(0)
 if __name__ == "__main__":
     main()
