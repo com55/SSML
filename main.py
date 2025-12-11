@@ -136,11 +136,17 @@ class StellaSoraModLoader:
 class StellaSoraGame:
     def __init__(self, game_exe_path: Path) -> None:
         self.game_exe_path = Path(game_exe_path)
+        self.process_handle: subprocess.Popen | None = None
     
     def start(self) -> None:
-        subprocess.Popen([self.game_exe_path])
+        self.process_handle = subprocess.Popen([self.game_exe_path])
 
     def is_running(self) -> bool:
+        # Check from Process Handle
+        if self.process_handle:
+            return self.process_handle.poll() is None
+        
+        # Fallback: if not have Process Handle
         for proc in psutil.process_iter(['name']):  # pyright: ignore[reportUnknownMemberType]
             try:
                 if proc.info['name'].lower() == self.game_exe_path.name.lower():
@@ -148,6 +154,23 @@ class StellaSoraGame:
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 pass
         return False
+
+    def wait_for_game_closed(self) -> bool:
+        """
+        Blocks execution until the game process closes, using low CPU consumption.
+        Returns True if process was successfully monitored and closed, False otherwise.
+        """
+        if not self.process_handle:
+            return False 
+
+        while self.process_handle.poll() is None:
+            self.process_handle.wait(timeout=1)
+
+        # Final check to ensure process is closed
+        if self.is_running():
+            return self.wait_for_game_closed()
+        
+        return True
 
 def main():
     config_file = 'config.ini'
@@ -229,23 +252,20 @@ def main():
         return
     
     # wait for game to spawn process
-    time.sleep(5)
+    time.sleep(1)
     clear_line()
-    console.print("Waiting for game to start...")
     console.print(full_width_line("─"))
-    game_started = False
-    while True:
-        if game.is_running():
-            game_started = True
-            clear_line(2)
-            console.print(Text("Game status: ", style="bright_blue") + Text("Running", style="bold green"))
-            console.print(full_width_line("─"))
-        else:
-            if game_started:
-                clear_line(2)
-                console.print(Text("Game status: ", style="bright_blue") + Text("Game closed detected.", style="bold red"))
-                break
-        time.sleep(5)
+    
+    clear_line(2)
+    console.print(Text("Game status: ", style="bright_blue") + Text("Running", style="bold green"))
+    console.print(full_width_line("─"))
+
+    game.wait_for_game_closed()
+
+    time.sleep(1)
+
+    clear_line(2)
+    console.print(Text("Game status: ", style="bright_blue") + Text("Game closed detected.", style="bold red"))
     console.print(full_width_line("─"))
     
     console.rule(Text("Restore Original Files", style="bold"), style="white")
