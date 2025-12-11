@@ -109,27 +109,26 @@ def full_width_line(char: str = "=") -> str:
 def clear_line(num_lines: int = 1) -> None:
     print("\033[1A\033[K" * num_lines, end="")
 
-def countdown_exit(seconds: int = 5) -> bool:
+def countdown_exit(seconds: int = 5) -> None:
     """
-    Countdown and exit program, can press any key to abort
-    Returns True if user abort, False if not abort
+    Countdown before exit, user can press any key to pause countdown and read output.
+    After pausing, user must press Enter to close the program.
     """
-    aborted = False
+    paused = False
     for i in range(seconds, 0, -1):
-        console.print(f"Program will exit in {i} seconds, press any key to abort exit...", style="bold yellow")
+        console.print(f"Program will exit in {i} seconds, press any key to pause...", style="bold yellow")
         for _ in range(10):
             time.sleep(0.1)
             if msvcrt.kbhit():
                 msvcrt.getch()
-                aborted = True
+                paused = True
                 break
         clear_line()
-        if aborted:
+        if paused:
             break
-    if aborted:
-        console.print("Exit aborted. Press Enter to close the program...", style="bold green")
+    if paused:
+        console.print("Countdown paused. Press Enter to close the program...", style="bold green")
         input()
-    return aborted
 
 def status_text(status: bool) -> Text:
     style = "bold green" if status else "bold red"
