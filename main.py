@@ -166,9 +166,9 @@ class StellaSoraGame:
         while self.process_handle.poll() is None:
             self.process_handle.wait(timeout=1)
 
-        # Final check to ensure process is closed
-        if self.is_running():
-            return self.wait_for_game_closed()
+        # Final safety check to ensure process is closed
+        while self.is_running():
+            time.sleep(1)
         
         return True
 
