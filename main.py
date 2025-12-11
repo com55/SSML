@@ -232,7 +232,7 @@ class StellaSoraGame:
             return False 
 
         while self.process_handle.poll() is None:
-            self.process_handle.wait(timeout=1)
+            self.process_handle.wait()
 
         # Final safety check to ensure process is closed
         while self.is_running():
@@ -295,7 +295,7 @@ def main():
     console.rule(Text("Configuration", style="bold"), style="white")
     console.rule(Text(f"You can change settings in the {config_file} file", style="green"), characters=" ")
     console.rule(Text("Or delete it to restart the configuration wizard.", style="green"), characters=" ")
-    console.print(full_width_line("─"))
+    console.print(full_width_line("-"))
     console.print(Text("Game executable path: ", style="bright_blue") + Text(GAME_EXE_PATH, style="yellow"))
     console.print(Text("Target executable name: ", style="bright_blue") + Text(TARGET_EXE_NAME, style="yellow"))
     console.print(Text("Mods directory: ", style="bright_blue") + Text(MODS_DIR, style="yellow"))
@@ -318,7 +318,7 @@ def main():
     console.print("Mods installed successfully", style="bold green")
     
     console.rule(Text("Start Game", style="bold"), style="white")
-    console.print("Starting game...", style="bold green")
+    console.rule(Text("Starting game...", style="bold green"), characters=" ")
     game.start()
     if not RESTORE_ORIGINAL_FILE_WHEN_CLOSED:
         console.print("Mods will not be restored when game is closed, program will exit...", style="bold yellow")
@@ -327,14 +327,14 @@ def main():
     
     # wait for game to spawn process
     time.sleep(1)
-    clear_line()
-    console.print(full_width_line("─"))
     
-    clear_line(2)
-    console.print(Text("Game status: ", style="bright_blue") + Text("Running", style="bold green"))
+    clear_line()
+    console.rule(Text("Game status: ", style="bright_blue") + Text("Running", style="bold green"), characters=" ")
+    console.rule(Text("Please do not close the program", style="bold yellow"), characters=" ")
+    console.rule(Text("Waiting for the restore after the game is closed...", style="bold yellow"), characters=" ")
     console.print(full_width_line("─"))
 
-    time.sleep(1)
+    time.sleep(3)
 
     if HIDE_CONSOLE_WHEN_RUNNING:
         hide_console()
@@ -346,9 +346,8 @@ def main():
 
     time.sleep(1)
 
-    clear_line(2)
-    console.print(Text("Game status: ", style="bright_blue") + Text("Game closed detected.", style="bold red"))
-    console.print(full_width_line("─"))
+    clear_line(4)
+    console.rule(Text("Game status: ", style="bright_blue") + Text("Game closed detected", style="bold red"), characters=" ")
     
     console.rule(Text("Restore Original Files", style="bold"), style="white")
     loader.restore_all()
