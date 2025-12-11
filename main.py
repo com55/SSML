@@ -1,4 +1,5 @@
 from collections import defaultdict
+import ctypes
 import configparser
 import hashlib
 from pathlib import Path
@@ -11,10 +12,31 @@ from rich.console import Console
 from rich.text import Text
 
 console = Console()
+
 if getattr(sys, 'frozen', False):
     PROGRAM_PATH = Path(sys.executable).parent
 else:
     PROGRAM_PATH = Path(__file__).parent
+
+def hide_console():
+    """Hide Console/Terminal (SW_HIDE = 0)"""
+    try:
+        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+        if hwnd:
+            # SW_HIDE = 0
+            ctypes.windll.user32.ShowWindow(hwnd, 0) 
+    except Exception:
+        pass
+
+def show_console():
+    """Show Console/Terminal (SW_SHOW = 5)"""
+    try:
+        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+        if hwnd:
+            # SW_SHOW = 5
+            ctypes.windll.user32.ShowWindow(hwnd, 5) 
+    except Exception:
+        pass
 
 def full_width_line(char: str = "=") -> str:
     width = max(console.size.width, 10)
@@ -260,8 +282,12 @@ def main():
     console.print(Text("Game status: ", style="bright_blue") + Text("Running", style="bold green"))
     console.print(full_width_line("─"))
 
+    time.sleep(1)
+    hide_console()
+
     game.wait_for_game_closed()
 
+    show_console()
     time.sleep(1)
 
     clear_line(2)
