@@ -9,6 +9,7 @@ import psutil
 import subprocess
 import sys
 from tkinter import filedialog
+from typing import Callable, Generic, TypeVar, cast
 from rich.console import Console
 from rich.text import Text
 
@@ -50,15 +51,27 @@ def status_text(status: bool) -> Text:
     style = "bold green" if status else "bold red"
     return Text("Enabled" if status else "Disabled", style=style)
 
-class ConfigOption:
-    def __init__(self, config_parent, section: str, option: str, default: str, type_func=str):
-        self.config_parent = config_parent # เก็บตัวแม่ไว้เรียก save
+T = TypeVar("T")
+
+class ConfigOption(Generic[T]):
+    def __init__(
+        self,
+        config_parent: "Config",
+        section: str,
+        option: str,
+        default: T | None = None,
+        type_func: Callable[[str], T] | None = str,
+    ) -> None:
+        self.config_parent = config_parent  # เก็บตัวแม่ไว้เรียก save
         self.section = section
         self.option = option
         self.default = default
-        self.type_func = type_func # ตัวแปลง type เช่น str, bool, int
+        # type_func ใช้แปลงค่าจาก string ใน config ให้เป็น type ที่ต้องการ เช่น str, bool, int
+        self.type_func: Callable[[str], T] = (
+            type_func if type_func is not None else cast(Callable[[str], T], str)
+        )
 
-    def get(self):
+    def get(self) -> T | None:
         """ดึงค่าล่าสุดจากไฟล์"""
         val = self.config_parent.config.get(self.section, self.option, fallback=self.default)
 
@@ -66,12 +79,12 @@ class ConfigOption:
             return None
 
         # จัดการเรื่อง Boolean เป็นพิเศษ เพราะ configparser เก็บเป็น string
-        if self.type_func == bool:
-            return str(val).lower() in ('true', 'yes', '1', 'on')
-            
-        return self.type_func(val)
+        if self.type_func is bool:
+            return cast(T, str(val).lower() in ("true", "yes", "1", "on"))
 
-    def set(self, value):
+        return self.type_func(str(val))
+
+    def set(self, value: T) -> None:
         """บันทึกค่าลงไฟล์"""
         if not self.config_parent.config.has_section(self.section):
             self.config_parent.config.add_section(self.section)
@@ -103,17 +116,15 @@ class Config:
         self.config_file = config_file
         self._load_config()
         
-        # --- กำหนด Setting ต่างๆ ตรงนี้ (Class ซ้อน Class แบบที่นายอยากได้) ---
-        
         # แบบ String
-        self.GameExePath = ConfigOption(self, 'Directory', 'game_exe_path', None)
-        self.ModsDir = ConfigOption(self, 'Directory', 'mods_dir', None)
-        self.TargetExeName = ConfigOption(self, 'Settings', 'target_exe_name', 'StellaSora.exe')
-        self.ModExtension = ConfigOption(self, 'Settings', 'mod_extension', '.unity3d')
+        self.GameExePath: ConfigOption[str] = ConfigOption(self, 'Directory', 'game_exe_path')
+        self.ModsDir: ConfigOption[str] = ConfigOption(self, 'Directory', 'mods_dir')
+        self.TargetExeName: ConfigOption[str] = ConfigOption(self, 'Settings', 'target_exe_name')
+        self.ModExtension: ConfigOption[str] = ConfigOption(self, 'Settings', 'mod_extension')
         
         # แบบ Boolean (ใส่ type_func=bool)
-        self.RestoreOriginalFileWhenGameClosed = ConfigOption(self, 'Settings', 'restore_when_close', None, type_func=bool)
-        self.HideConsoleWhenRunning = ConfigOption(self, 'Settings', 'hide_console', 'True', type_func=bool)
+        self.RestoreOriginalFileWhenGameClosed: ConfigOption[bool] = ConfigOption(self, 'Settings', 'restore_when_close', None, type_func=bool)
+        self.HideConsoleWhenRunning: ConfigOption[bool] = ConfigOption(self, 'Settings', 'hide_console', True, type_func=bool)
 
     def _load_config(self):
         self.config.read(self.config_file)
@@ -233,11 +244,11 @@ def main():
     config_file = 'config.ini'
     config = Config(config_file)
     GAME_EXE_PATH = config.GameExePath()
-    TARGET_EXE_NAME = config.TargetExeName()
+    TARGET_EXE_NAME = config.TargetExeName() or "StellaSora.exe"
     MODS_DIR = config.ModsDir()
-    MOD_EXTENSION = config.ModExtension()
-    RESTORE_ORIGINAL_FILE_WHEN_CLOSED = config.RestoreOriginalFileWhenGameClosed()
-    HIDE_CONSOLE_WHEN_RUNNING = config.HideConsoleWhenRunning()
+    MOD_EXTENSION = config.ModExtension() or ".unity3d"
+    RESTORE_ORIGINAL_FILE_WHEN_CLOSED = config.RestoreOriginalFileWhenGameClosed
+    HIDE_CONSOLE_WHEN_RUNNING = bool(config.HideConsoleWhenRunning)
     
     if not GAME_EXE_PATH or not Path(GAME_EXE_PATH).exists() or TARGET_EXE_NAME.lower() not in GAME_EXE_PATH.lower():
         console.print(full_width_line("-"), style="blue")
