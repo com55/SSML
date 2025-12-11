@@ -40,7 +40,6 @@ jobs:
           --onefile ^
           --enable-console ^
           --output-dir=build ^
-          --windows-disable-original-console ^
           --plugin-enable=tk-inter ^
           --include-package=rich ^
           --include-package=psutil ^
