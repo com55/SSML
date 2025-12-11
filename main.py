@@ -285,37 +285,53 @@ class StellaSoraGame:
         self.process_handle: subprocess.Popen | None = None
     
     def start(self) -> None:
-        self.process_handle = subprocess.Popen(
-            [self.game_exe_path],
+        # Use 'start' command via cmd to launch game in a completely separate process
+        # This breaks the parent-child console relationship entirely
+        subprocess.Popen(
+            f'start "" "{self.game_exe_path}"',
+            shell=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
         )
+        self.process_handle = None  # We can't get handle from 'start' command
 
-    def is_running(self) -> bool:
-        # Check from Process Handle
-        if self.process_handle:
-            return self.process_handle.poll() is None
-        
-        # Fallback: if not have Process Handle
+    def get_process(self) -> psutil.Process | None:
+        """Get the game process object using psutil"""
         for proc in psutil.process_iter(['name']):  # pyright: ignore[reportUnknownMemberType]
             try:
                 if proc.info['name'].lower() == self.game_exe_path.name.lower():
-                    return True
+                    return proc
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 pass
-        return False
+        return None
+
+    def is_running(self) -> bool:
+        # Check if game process is running using psutil
+        return self.get_process() is not None
 
     def wait_for_game_closed(self) -> bool:
         """
         Blocks execution until the game process closes, using low CPU consumption.
         Returns True if process was successfully monitored and closed, False otherwise.
         """
-        if not self.process_handle:
-            return False 
-
-        while self.process_handle.poll() is None:
-            self.process_handle.wait()
-
+        # Wait for game process to appear (up to 10 seconds)
+        proc = None
+        for _ in range(10):
+            proc = self.get_process()
+            if proc:
+                break
+            time.sleep(1)
+        
+        if not proc:
+            return False
+        
+        # Wait for process to close using psutil
+        try:
+            proc.wait()
+        except psutil.NoSuchProcess:
+            pass
+        
         # Final safety check to ensure process is closed
         while self.is_running():
             time.sleep(1)
