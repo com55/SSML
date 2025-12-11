@@ -7,6 +7,7 @@ import shutil
 import time
 import psutil
 import subprocess
+import sys
 from tkinter import filedialog
 from rich.console import Console
 from rich.text import Text
@@ -239,7 +240,7 @@ def main():
         console.print(full_width_line("-"), style="blue")
         console.print("Game executable path missing or not valid, please select the game executable", style="bold bright_blue")
         GAME_EXE_PATH = filedialog.askopenfilename(filetypes=[(TARGET_EXE_NAME, TARGET_EXE_NAME)])
-        config.set_game_exe_path(GAME_EXE_PATH)
+        config.GameExePath.set(GAME_EXE_PATH)
         clear_line()
         console.print(Text(f"Game executable path set to ", style="bright_blue") + Text(GAME_EXE_PATH, style="yellow"))
         console.print(full_width_line("-"), style="blue")
@@ -248,7 +249,7 @@ def main():
         mods_dir = Path(PROGRAM_PATH).absolute() / "Mods"
         mods_dir.mkdir(parents=True, exist_ok=True)
         MODS_DIR = mods_dir.as_posix()
-        config.set_mods_dir(MODS_DIR)
+        config.ModsDir.set(MODS_DIR)
         console.print("Mods directory not found", style="bold yellow")
         console.print(Text(f"Using default directory: ", style="bright_blue") + Text(MODS_DIR, style="yellow"))
         console.print(full_width_line("-"), style="blue")
@@ -268,7 +269,7 @@ def main():
         else:
             console.print("Invalid choice, default is Enabled", style="yellow")
             RESTORE_MODS_WHEN_CLOSE = True
-        config.set_setting_value('restore_when_close', str(RESTORE_MODS_WHEN_CLOSE))
+        config.RestoreModsWhenClose.set(RESTORE_MODS_WHEN_CLOSE)
         clear_line()
         console.print(
             Text("Restore when game is closed set to ", style="bright_blue")
@@ -317,7 +318,7 @@ def main():
     console.print(full_width_line("─"))
 
     time.sleep(1)
-    
+
     if HIDE_CONSOLE_WHEN_RUNNUNG:
         hide_console()
 
