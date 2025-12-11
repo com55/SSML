@@ -1,7 +1,7 @@
 [project]
-name = "stallesoramodloader"
+name = "stellamodlauncher"
 version = "0.1.0"
-description = "Add your description here"
+description = "StellaSora Mod Launcher"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

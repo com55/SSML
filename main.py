@@ -92,9 +92,9 @@ def minimize_to_tray() -> Any:
     )
 
     icon = pystray.Icon(
-        "StellaSoraModLoader",
+        "StellaSoraModLauncher",
         load_icon_image(),
-        "StellaSora Mod Loader - Waiting for game to close...",
+        "StellaSora Mod Launcher - Waiting for game to close...",
         menu=menu,
     )
 
