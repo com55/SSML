@@ -1,0 +1,83 @@
+name: StellaSoraModLoader Build
+
+on:
+  push:
+    tags:
+      - 'v*' # Trigger when push tag startwith v (etc. v0.1.0)
+  workflow_dispatch: # Manual
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv and Nuitka
+        run: pip install uv nuitka
+
+      - name: Install Project Dependencies (using uv)
+        run: uv sync
+
+      - name: Find rich data folder path
+        id: richpath
+        run: |
+          $python_exe_path = (Get-Command -Name python).Source
+          $rich_path = $python_exe_path -replace 'python.exe', 'Lib\site-packages\rich'
+          echo "RICH_DATA_PATH=$rich_path" >> $env:GITHUB_ENV
+        shell: powershell
+
+      - name: Build Executable with Nuitka
+        run: |
+          python -m nuitka ^
+          --standalone ^
+          --onefile ^
+          --enable-console ^
+          --output-dir=build ^
+          --windows-disable-original-console ^
+          --plugin-enable=tk-inter ^
+          --include-package=rich ^
+          --include-package=psutil ^
+          --include-data-dir="${{ env.RICH_DATA_PATH }}=rich" ^
+          --windows-icon="icon.ico" ^
+          main.py
+        shell: cmd
+
+      - name: Prepare Release Structure (Folder & EXE)
+        # สร้างโครงสร้าง: release_package/StellaSoraModLoader/StellaSoraModLoader.exe
+        run: |
+          mkdir release_package
+          mkdir release_package/StellaSoraModLoader
+          # ย้าย main.exe ที่ Build เสร็จแล้วเข้าสู่ Folder ใหม่
+          Rename-Item build\main.exe release_package/StellaSoraModLoader/StellaSoraModLoader.exe
+          
+        shell: powershell
+
+      - name: Upload Build Artifact (Manual/Test Only)
+        # Manual
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: StellaSoraModLoader-Windows-Build-Test
+          path: release_package/StellaSoraModLoader
+          
+      - name: Create Zip Archive
+        # Release: Zip
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          $tag_name = "${{ github.ref_name }}" # Get Tag (v1.0.0)
+          Compress-Archive -Path release_package/StellaSoraModLoader -DestinationPath release_package/StellaSoraModLoader-$tag_name.zip
+        shell: powershell
+
+      - name: Upload Release Asset (Tag Only)
+        # ทำงานเฉพาะเมื่อถูก Trigger ด้วย Tag: แนบไฟล์ Zip เข้า Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release_package/StellaSoraModLoader-${{ github.ref_name }}.zip
