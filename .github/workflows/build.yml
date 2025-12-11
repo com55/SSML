@@ -13,67 +13,64 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
         with:
           version: "latest"
-      - uses: actions/setup-python@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          architecture: 'x64'
 
-      - name: Install Project Dependencies (using uv)
-        run: uv sync --frozen
+      - name: Export requirements from uv
+        run: uv export --format requirements-txt --no-hashes > requirements.txt
 
-      - name: Find rich data folder path
-        id: richpath
-        run: |
-          $python_exe_path = (Get-Command -Name python).Source
-          $rich_path = $python_exe_path -replace 'python.exe', 'Lib\site-packages\rich'
-          echo "RICH_DATA_PATH=$rich_path" >> $env:GITHUB_ENV
-        shell: powershell
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
 
       - name: Build Executable with Nuitka
-        run: |
-          uv run python -m nuitka ^
-          --standalone ^
-          --onefile ^
-          --enable-console ^
-          --output-dir=build ^
-          --plugin-enable=tk-inter ^
-          --include-package=rich ^
-          --include-package=psutil ^
-          --include-data-dir="${{ env.RICH_DATA_PATH }}=rich" ^
-          --windows-icon-from-ico="icon.ico" ^
-          main.py
-        shell: cmd
+        uses: Nuitka/Nuitka-Action@main
+        with:
+          nuitka-version: main
+          script-name: main.py
+          mode: onefile
+          enable-plugins: tk-inter
+          include-package: |
+            rich
+            psutil
+            pystray
+            PIL
+          include-data-files: |
+            icon.ico=icon.ico
+          windows-icon-from-ico: icon.ico
+          output-dir: build
 
-      - name: Prepare Release Structure (Folder & EXE)
-        # สร้างโครงสร้าง: release_package/StellaSoraModLoader/StellaSoraModLoader.exe
+      - name: Prepare Release Structure
         run: |
           mkdir release_package
           mkdir release_package/StellaSoraModLoader
-          # ย้าย main.exe ที่ Build เสร็จแล้วเข้าสู่ Folder ใหม่
-          Rename-Item build\main.exe release_package/StellaSoraModLoader/StellaSoraModLoader.exe
-          
+          Move-Item build/main.exe release_package/StellaSoraModLoader/StellaSoraModLoader.exe
         shell: powershell
 
       - name: Upload Build Artifact (Manual/Test Only)
-        # Manual
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: StellaSoraModLoader-Windows-Build-Test
           path: release_package/StellaSoraModLoader
-          
+          include-hidden-files: true
+
       - name: Create Zip Archive
-        # Release: Zip
         if: startsWith(github.ref, 'refs/tags/')
         run: |
-          $tag_name = "${{ github.ref_name }}" # Get Tag (v1.0.0)
+          $tag_name = "${{ github.ref_name }}"
           Compress-Archive -Path release_package/StellaSoraModLoader -DestinationPath release_package/StellaSoraModLoader-$tag_name.zip
         shell: powershell
 
       - name: Upload Release Asset (Tag Only)
-        # ทำงานเฉพาะเมื่อถูก Trigger ด้วย Tag: แนบไฟล์ Zip เข้า Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:

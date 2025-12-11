@@ -22,6 +22,18 @@ if getattr(sys, 'frozen', False):
 else:
     PROGRAM_PATH = Path(__file__).parent
 
+def resource_path(relative_path: str) -> Path:
+    import os
+    # Nuitka onefile mode: resource อยู่ในโฟลเดอร์ชั่วคราว
+    nuitka_onefile_dir = os.environ.get("NUITKA_ONEFILE_PARENT")
+    if nuitka_onefile_dir:
+        return Path(nuitka_onefile_dir) / relative_path
+    # PyInstaller compatibility
+    if hasattr(sys, '_MEIPASS'):
+        return Path(sys._MEIPASS) / relative_path  # type: ignore
+    # Fallback: ใช้ path ของโปรแกรม
+    return PROGRAM_PATH / relative_path
+
 def hide_console():
     """Hide Console/Terminal (SW_HIDE = 0)"""
     try:
@@ -59,7 +71,7 @@ def minimize_to_tray() -> Any:
         return None
 
     def load_icon_image() -> Any:
-        icon_path = PROGRAM_PATH / "icon.ico"
+        icon_path = resource_path("icon.ico")
         if icon_path.exists():
             return Image.open(icon_path)
         return Image.new("RGB", (64, 64), (0, 170, 255))
