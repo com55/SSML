@@ -250,7 +250,6 @@ def main():
     console.print("Mods restored successfully", style="bold green")
     console.print(full_width_line("─"))
     console.print("Program will exit...", style="bold yellow")
-    input("Press Enter to exit...")
 
 if __name__ == "__main__":
     main()
