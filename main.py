@@ -2,6 +2,7 @@ from collections import defaultdict
 import ctypes
 import configparser
 import hashlib
+import os
 from pathlib import Path
 import shutil
 import time
@@ -11,19 +12,25 @@ import sys
 from threading import Thread
 import msvcrt
 from tkinter import filedialog
-from typing import Any, Callable, Generic, TypeVar, cast
+from typing import Any
 from rich.console import Console
 from rich.text import Text
 
 console = Console()
 
-if getattr(sys, 'frozen', False):
+# Determine program path (handles Nuitka onefile, PyInstaller, and dev mode)
+_nuitka_onefile_parent = os.environ.get("NUITKA_ONEFILE_PARENT")
+if _nuitka_onefile_parent:
+    # Nuitka onefile mode: NUITKA_ONEFILE_PARENT points to the exe's directory
+    PROGRAM_PATH = Path(_nuitka_onefile_parent)
+elif getattr(sys, 'frozen', False):
+    # PyInstaller
     PROGRAM_PATH = Path(sys.executable).parent
 else:
+    # Development mode
     PROGRAM_PATH = Path(__file__).parent
 
 def resource_path(relative_path: str) -> Path:
-    import os
     # Nuitka onefile mode: resource อยู่ในโฟลเดอร์ชั่วคราว
     nuitka_onefile_dir = os.environ.get("NUITKA_ONEFILE_PARENT")
     if nuitka_onefile_dir:
@@ -106,64 +113,58 @@ def status_text(status: bool) -> Text:
     style = "bold green" if status else "bold red"
     return Text("Enabled" if status else "Disabled", style=style)
 
-T = TypeVar("T")
-
-class ConfigOption(Generic[T]):
-    def __init__(
-        self,
-        config_parent: "Config",
-        section: str,
-        option: str,
-        default: T | None = None,
-        type_func: Callable[[str], T] | None = str,
-    ) -> None:
-        self.config_parent = config_parent  # เก็บตัวแม่ไว้เรียก save
+class _ConfigOptionBase:
+    """Base class สำหรับ config options"""
+    def __init__(self, config_parent: "Config", section: str, option: str) -> None:
+        self.config_parent = config_parent
         self.section = section
         self.option = option
-        self.default = default
-        # type_func ใช้แปลงค่าจาก string ใน config ให้เป็น type ที่ต้องการ เช่น str, bool, int
-        self.type_func: Callable[[str], T] = (
-            type_func if type_func is not None else cast(Callable[[str], T], str)
-        )
-
-    def get(self) -> T | None:
-        """ดึงค่าล่าสุดจากไฟล์"""
-        val = self.config_parent.config.get(self.section, self.option, fallback=self.default)
-
-        if val is None:
+        
+    def _get_raw(self) -> str | None:
+        """ดึงค่า raw จาก config, return None ถ้าไม่มีหรือว่าง"""
+        try:
+            val = self.config_parent.config.get(self.section, self.option)
+        except (configparser.NoSectionError, configparser.NoOptionError):
             return None
-
-        # จัดการเรื่อง Boolean เป็นพิเศษ เพราะ configparser เก็บเป็น string
-        if self.type_func is bool:
-            return cast(T, str(val).lower() in ("true", "yes", "1", "on"))
-
-        return self.type_func(str(val))
-
-    def set(self, value: T) -> None:
-        """บันทึกค่าลงไฟล์"""
+        if not val or val.strip() == "":
+            return None
+        return val
+    
+    def _set_raw(self, value: str) -> None:
+        """บันทึกค่าลง config file"""
         if not self.config_parent.config.has_section(self.section):
             self.config_parent.config.add_section(self.section)
-            
-        self.config_parent.config.set(self.section, self.option, str(value))
+        self.config_parent.config.set(self.section, self.option, value)
         self.config_parent._save_config()
 
-    # --- Magic Methods เพื่อให้ใช้งานได้เหมือนตัวแปรปกติ ---
+
+class StringConfig(_ConfigOptionBase):
+    """Config option สำหรับค่า string"""
+    def get(self) -> str | None:
+        return self._get_raw()
     
-    def __call__(self):
-        """ถ้าเรียกเป็นฟังก์ชัน config.Option() ให้คืนค่า"""
-        return self.get()
+    def set(self, value: str) -> str:
+        self._set_raw(value)
+        return value
 
-    def __bool__(self):
-        """ถ้าเอาไปใส่ if config.Option: ให้เช็คค่า bool"""
-        return bool(self.get())
 
-    def __str__(self):
-        """ถ้าสั่ง print(config.Option) ให้แสดงค่า"""
-        return str(self.get())
-        
-    def __eq__(self, other):
-        """เปรียบเทียบค่าได้เลย if config.Option == True:"""
-        return self.get() == other
+class BoolConfig(_ConfigOptionBase):
+    """Config option สำหรับค่า boolean"""
+    def get(self) -> bool | None:
+        val = self._get_raw()
+        if val is None:
+            return None
+        val_lower = val.strip().lower()
+        if val_lower in ("true", "yes", "1", "on"):
+            return True
+        if val_lower in ("false", "no", "0", "off"):
+            return False
+        # ค่าไม่ถูกต้อง → None
+        return None
+    
+    def set(self, value: bool) -> bool:
+        self._set_raw(str(value))
+        return value
 
 class Config:
     def __init__(self, config_file: str = 'config.ini'):
@@ -171,15 +172,15 @@ class Config:
         self.config_file = config_file
         self._load_config()
         
-        # แบบ String
-        self.GameExePath: ConfigOption[str] = ConfigOption(self, 'Directory', 'game_exe_path')
-        self.ModsDir: ConfigOption[str] = ConfigOption(self, 'Directory', 'mods_dir')
-        self.TargetExeName: ConfigOption[str] = ConfigOption(self, 'Settings', 'target_exe_name')
-        self.ModExtension: ConfigOption[str] = ConfigOption(self, 'Settings', 'mod_extension')
+        # String options
+        self.GameExePath = StringConfig(self, 'Directory', 'game_exe_path')
+        self.ModsDir = StringConfig(self, 'Directory', 'mods_dir')
+        self.TargetExeName = StringConfig(self, 'Settings', 'target_exe_name')
+        self.ModExtension = StringConfig(self, 'Settings', 'mod_extension')
         
-        # แบบ Boolean (ใส่ type_func=bool)
-        self.RestoreOriginalFileWhenGameClosed: ConfigOption[bool] = ConfigOption(self, 'Settings', 'restore_when_close', None, type_func=bool)
-        self.HideConsoleWhenRunning: ConfigOption[bool] = ConfigOption(self, 'Settings', 'hide_console', True, type_func=bool)
+        # Boolean options
+        self.RestoreOriginalFileWhenGameClosed = BoolConfig(self, 'Settings', 'restore_original_file_when_game_closed')
+        self.HideConsoleWhenRunning = BoolConfig(self, 'Settings', 'hide_console_when_running')
 
     def _load_config(self):
         self.config.read(self.config_file)
@@ -262,7 +263,11 @@ class StellaSoraGame:
         self.process_handle: subprocess.Popen | None = None
     
     def start(self) -> None:
-        self.process_handle = subprocess.Popen([self.game_exe_path])
+        self.process_handle = subprocess.Popen(
+            [self.game_exe_path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 
     def is_running(self) -> bool:
         # Check from Process Handle
@@ -298,13 +303,13 @@ class StellaSoraGame:
 def main():
     config_file = 'config.ini'
     config = Config(config_file)
-    GAME_EXE_PATH = config.GameExePath()
-    TARGET_EXE_NAME = config.TargetExeName() or "StellaSora.exe"
-    MODS_DIR = config.ModsDir()
-    MOD_EXTENSION = config.ModExtension() or ".unity3d"
-    RESTORE_ORIGINAL_FILE_WHEN_CLOSED = config.RestoreOriginalFileWhenGameClosed
-    HIDE_CONSOLE_WHEN_RUNNING = bool(config.HideConsoleWhenRunning)
-    
+    GAME_EXE_PATH = config.GameExePath.get()
+    TARGET_EXE_NAME = config.TargetExeName.get() or config.TargetExeName.set("StellaSora.exe")
+    MODS_DIR = config.ModsDir.get()
+    MOD_EXTENSION = config.ModExtension.get() or config.ModExtension.set(".unity3d")
+    RESTORE_ORIGINAL_FILE_WHEN_CLOSED = config.RestoreOriginalFileWhenGameClosed.get()
+    HIDE_CONSOLE_WHEN_RUNNING = config.HideConsoleWhenRunning.get()
+
     if not GAME_EXE_PATH or not Path(GAME_EXE_PATH).exists() or TARGET_EXE_NAME.lower() not in GAME_EXE_PATH.lower():
         console.print(full_width_line("-"), style="blue")
         console.print("Game executable path missing or not valid, please select the game executable", style="bold bright_blue")
@@ -347,6 +352,10 @@ def main():
         console.print()
     RESTORE_ORIGINAL_FILE_WHEN_CLOSED = bool(RESTORE_ORIGINAL_FILE_WHEN_CLOSED)
     
+    if HIDE_CONSOLE_WHEN_RUNNING is None:
+        HIDE_CONSOLE_WHEN_RUNNING = True
+        config.HideConsoleWhenRunning.set(HIDE_CONSOLE_WHEN_RUNNING)
+    
     console.rule(Text("Configuration", style="bold"), style="white")
     console.rule(Text(f"You can change settings in the {config_file} file", style="green"), characters=" ")
     console.rule(Text("Or delete it to restart the configuration wizard.", style="green"), characters=" ")
@@ -359,7 +368,6 @@ def main():
     console.print(Text("Hide console windows when running: ", style="bright_blue") + status_text(HIDE_CONSOLE_WHEN_RUNNING))
 
     loader = StellaSoraModLoader(Path(GAME_EXE_PATH).parent, Path(MODS_DIR), MOD_EXTENSION)
-    mods_list = loader.get_mods_list()
     
     game = StellaSoraGame(Path(GAME_EXE_PATH))
     
@@ -376,6 +384,7 @@ def main():
     console.rule(Text("Game status: ", style="bright_blue") + Text("Starting game...", style="bold green"), characters=" ")
     game.start()
     if not RESTORE_ORIGINAL_FILE_WHEN_CLOSED:
+        console.print(full_width_line("─"))
         console.print("Mods will not be restored when game is closed, program will exit...", style="bold yellow")
         input("Press Enter to exit...")
         return
