@@ -109,6 +109,28 @@ def full_width_line(char: str = "=") -> str:
 def clear_line(num_lines: int = 1) -> None:
     print("\033[1A\033[K" * num_lines, end="")
 
+def countdown_exit(seconds: int = 5) -> bool:
+    """
+    Countdown and exit program, can press any key to abort
+    Returns True if user abort, False if not abort
+    """
+    aborted = False
+    for i in range(seconds, 0, -1):
+        console.print(f"Program will exit in {i} seconds, press any key to abort exit...", style="bold yellow")
+        for _ in range(10):
+            time.sleep(0.1)
+            if msvcrt.kbhit():
+                msvcrt.getch()
+                aborted = True
+                break
+        clear_line()
+        if aborted:
+            break
+    if aborted:
+        console.print("Exit aborted. Press Enter to close the program...", style="bold green")
+        input()
+    return aborted
+
 def status_text(status: bool) -> Text:
     style = "bold green" if status else "bold red"
     return Text("Enabled" if status else "Disabled", style=style)
@@ -386,7 +408,7 @@ def main():
     if not RESTORE_ORIGINAL_FILE_WHEN_CLOSED:
         console.print(full_width_line("─"))
         console.print("Mods will not be restored when game is closed, program will exit...", style="bold yellow")
-        input("Press Enter to exit...")
+        countdown_exit()
         return
     
     # wait for game to spawn process
@@ -426,25 +448,7 @@ def main():
     console.print("Mods restored successfully", style="bold green")
     console.print(full_width_line("─"))
     
-    # Countdown with abort option
-    aborted = False
-    for i in range(5, 0, -1):
-        console.print(f"Program will exit in {i} seconds, press any key to abort exit...", style="bold yellow")
-        # Wait 1 second but check for keypress every 100ms
-        for _ in range(10):
-            time.sleep(0.1)
-            if msvcrt.kbhit():
-                msvcrt.getch()  # clear the key from buffer
-                aborted = True
-                break
-        clear_line()
-        if aborted:
-            break
-    
-    if aborted:
-        console.print("Exit aborted. Press Enter to close the program...", style="bold green")
-        input()
-    
+    countdown_exit()
     sys.exit(0)
 if __name__ == "__main__":
     main()
