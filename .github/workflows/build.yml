@@ -37,14 +37,12 @@ jobs:
           nuitka-version: main
           script-name: main.py
           mode: onefile
-          enable-plugins: tk-inter
+          enable-plugins: pyside6
           include-package: |
-            rich
             psutil
-            pystray
-            PIL
           include-data-files: |
             icon.ico=icon.ico
+            style.qss=style.qss
           windows-icon-from-ico: icon.ico
           output-dir: build
 

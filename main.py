@@ -1,469 +1,284 @@
-from collections import defaultdict
-import ctypes
-import configparser
-import hashlib
-import os
-from pathlib import Path
-import shutil
-import time
-import psutil
-import subprocess
 import sys
-from threading import Thread
-import msvcrt
-from tkinter import filedialog
+from pathlib import Path
 from typing import Any
-from rich.console import Console
-from rich.text import Text
+from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
+                               QHBoxLayout, QPushButton, QListWidget, QListWidgetItem,
+                               QTextEdit, QLabel, QFileDialog, QCheckBox, QDialog,
+                               QFormLayout, QLineEdit, QSystemTrayIcon, QMenu)
+from PySide6.QtCore import QSize, Qt
+from PySide6.QtGui import QCloseEvent, QIcon, QAction
+from qt_material_icons import MaterialIcon
 
-console = Console()
+from viewmodel import MainViewModel, SettingsViewModel, ModData
+from core import get_resource_path
 
-# Determine program path (handles Nuitka onefile, PyInstaller, and dev mode)
-_nuitka_onefile_parent = os.environ.get("NUITKA_ONEFILE_PARENT")
-if _nuitka_onefile_parent:
-    # Nuitka onefile mode: NUITKA_ONEFILE_PARENT points to the exe's directory
-    PROGRAM_PATH = Path(_nuitka_onefile_parent).parent
-elif getattr(sys, 'frozen', False):
-    # PyInstaller
-    PROGRAM_PATH = Path(sys.executable).parent
-else:
-    # Development mode
-    PROGRAM_PATH = Path(__file__).parent
+def load_stylesheet() -> str:
+    """Load the QSS stylesheet from embedded resource."""
+    style_path = get_resource_path("style.qss")
+    if style_path.exists():
+        return style_path.read_text(encoding="utf-8")
+    return ""
 
-def resource_path(relative_path: str) -> Path:
-    # Nuitka onefile mode: resource อยู่ในโฟลเดอร์ชั่วคราว
-    nuitka_onefile_dir = os.environ.get("NUITKA_ONEFILE_PARENT")
-    if nuitka_onefile_dir:
-        return Path(nuitka_onefile_dir) / relative_path
-    # PyInstaller compatibility
-    if hasattr(sys, '_MEIPASS'):
-        return Path(sys._MEIPASS) / relative_path  # type: ignore
-    # Fallback: ใช้ path ของโปรแกรม
-    return PROGRAM_PATH / relative_path
+def get_app_icon_path() -> Path:
+    """Get the path to the application icon from embedded resource."""
+    return get_resource_path("icon.ico")
 
-def hide_console():
-    """Hide Console/Terminal (SW_HIDE = 0)"""
-    try:
-        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
-        if hwnd:
-            # SW_HIDE = 0
-            ctypes.windll.user32.ShowWindow(hwnd, 0) 
-    except Exception:
-        pass
-
-def show_console():
-    """Show Console/Terminal (SW_SHOW = 5)"""
-    try:
-        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
-        if hwnd:
-            # SW_SHOW = 5
-            ctypes.windll.user32.ShowWindow(hwnd, 5) 
-    except Exception:
-        pass
-
-def minimize_to_tray() -> Any:
-    """
-    ย่อคอนโซลลง system tray พร้อมเมนูเปิดหน้าต่าง / ออกโปรแกรม
-    ถ้าไม่มี pystray/Pillow จะ fallback เป็นการซ่อนคอนโซลเฉยๆ
-    """
-    try:
-        import pystray  # type: ignore
-        from PIL import Image  # type: ignore
-    except ImportError:
-        hide_console()
-        return None
-
-    hwnd = ctypes.windll.kernel32.GetConsoleWindow()
-    if not hwnd:
-        return None
-
-    def load_icon_image() -> Any:
-        icon_path = resource_path("icon.ico")
-        if icon_path.exists():
-            return Image.open(icon_path)
-        return Image.new("RGB", (64, 64), (0, 170, 255))
-
-    def on_restore(icon: Any, _item: Any) -> None:
-        show_console()
-        icon.stop()
-
-    menu = pystray.Menu(
-        pystray.MenuItem("Show console", on_restore),
-    )
-
-    icon = pystray.Icon(
-        "StellaSoraModLauncher",
-        load_icon_image(),
-        "StellaSora Mod Launcher - Waiting for game to close...",
-        menu=menu,
-    )
-
-    ctypes.windll.user32.ShowWindow(hwnd, 0)  # ซ่อนหน้าต่างคอนโซล
-    Thread(target=icon.run, daemon=True).start()
-    return icon
-
-def full_width_line(char: str = "=") -> str:
-    width = max(console.size.width, 10)
-    return char * width
-
-def clear_line(num_lines: int = 1) -> None:
-    print("\033[1A\033[K" * num_lines, end="")
-
-def countdown_exit(seconds: int = 5) -> None:
-    """
-    Countdown before exit, user can press any key to pause countdown and read output.
-    After pausing, user must press Enter to close the program.
-    """
-    paused = False
-    for i in range(seconds, 0, -1):
-        console.print(f"Program will exit in {i} seconds, press any key to pause...", style="bold yellow")
-        for _ in range(10):
-            time.sleep(0.1)
-            if msvcrt.kbhit():
-                msvcrt.getch()
-                paused = True
-                break
-        clear_line()
-        if paused:
-            break
-    if paused:
-        console.print("Countdown paused. Press Enter to close the program...", style="bold green")
-        input()
-
-def status_text(status: bool) -> Text:
-    style = "bold green" if status else "bold red"
-    return Text("Enabled" if status else "Disabled", style=style)
-
-class _ConfigOptionBase:
-    """Base class สำหรับ config options"""
-    def __init__(self, config_parent: "Config", section: str, option: str) -> None:
-        self.config_parent = config_parent
-        self.section = section
-        self.option = option
+# --- Settings Dialog ---
+class SettingsDialog(QDialog):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("settingsDialog")
+        self.setWindowTitle("Settings")
+        self.resize(500, 300)
+        self.vm = SettingsViewModel()
         
-    def _get_raw(self) -> str | None:
-        """ดึงค่า raw จาก config, return None ถ้าไม่มีหรือว่าง"""
-        try:
-            val = self.config_parent.config.get(self.section, self.option)
-        except (configparser.NoSectionError, configparser.NoOptionError):
-            return None
-        if not val or val.strip() == "":
-            return None
-        return val
-    
-    def _set_raw(self, value: str) -> None:
-        """บันทึกค่าลง config file"""
-        if not self.config_parent.config.has_section(self.section):
-            self.config_parent.config.add_section(self.section)
-        self.config_parent.config.set(self.section, self.option, value)
-        self.config_parent._save_config()
-
-
-class StringConfig(_ConfigOptionBase):
-    """Config option สำหรับค่า string"""
-    def get(self) -> str | None:
-        return self._get_raw()
-    
-    def set(self, value: str) -> str:
-        self._set_raw(value)
-        return value
-
-
-class BoolConfig(_ConfigOptionBase):
-    """Config option สำหรับค่า boolean"""
-    def get(self) -> bool | None:
-        val = self._get_raw()
-        if val is None:
-            return None
-        val_lower = val.strip().lower()
-        if val_lower in ("true", "yes", "1", "on"):
-            return True
-        if val_lower in ("false", "no", "0", "off"):
-            return False
-        # ค่าไม่ถูกต้อง → None
-        return None
-    
-    def set(self, value: bool) -> bool:
-        self._set_raw(str(value))
-        return value
-
-class Config:
-    def __init__(self, config_file: str = 'config.ini'):
-        self.config = configparser.ConfigParser()
-        self.config_file = config_file
-        self._load_config()
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
         
-        # String options
-        self.GameExePath = StringConfig(self, 'Directory', 'game_exe_path')
-        self.ModsDir = StringConfig(self, 'Directory', 'mods_dir')
-        self.TargetExeName = StringConfig(self, 'Settings', 'target_exe_name')
-        self.ModExtension = StringConfig(self, 'Settings', 'mod_extension')
+        self.game_path_edit = QLineEdit(self.vm.get_game_path())
+        self.game_path_edit.setCursorPosition(0)
+        game_path_btn = QPushButton("Browse")
+        game_path_btn.setObjectName("browseButton")
+        game_path_btn.clicked.connect(self.browse_game_path)
+        game_path_layout = QHBoxLayout()
+        game_path_layout.addWidget(self.game_path_edit)
+        game_path_layout.addWidget(game_path_btn)
         
-        # Boolean options
-        self.RestoreOriginalFileWhenGameClosed = BoolConfig(self, 'Settings', 'restore_original_file_when_game_closed')
-        self.HideConsoleWhenRunning = BoolConfig(self, 'Settings', 'hide_console_when_running')
+        self.mods_dir_edit = QLineEdit(self.vm.get_mods_dir())
+        self.mods_dir_edit.setCursorPosition(0)
+        mods_dir_btn = QPushButton("Browse")
+        mods_dir_btn.setObjectName("browseButton")
+        mods_dir_btn.clicked.connect(self.browse_mods_dir)
+        mods_dir_layout = QHBoxLayout()
+        mods_dir_layout.addWidget(self.mods_dir_edit)
+        mods_dir_layout.addWidget(mods_dir_btn)
 
-    def _load_config(self):
-        self.config.read(self.config_file)
-    
-    def _save_config(self):
-        with open(self.config_file, 'w') as configfile:
-            self.config.write(configfile)
+        self.mod_ext_edit = QLineEdit(self.vm.get_mod_ext())
 
-class StellaSoraModLoader:
-    def __init__(self, game_resource_dir: Path, mods_dir: Path, mod_extension: str) -> None:
-        self.game_resource_dir = game_resource_dir
-        self.mods_dir = mods_dir
-        self.mod_extension = mod_extension
-        self.mods_list = self.get_mods_list()
-    
-    def get_mods_list(self) -> list[Path]:
-        pattern = f"*{self.mod_extension}"
-        return [
-            mod_file
-            for mod_file in self.mods_dir.rglob(pattern)
-            if not self._is_disabled_path(mod_file)
-        ]
+        self.restore_chk = QCheckBox("Restore original files when game closed")
+        self.restore_chk.setChecked(self.vm.get_restore())
 
-    def _is_disabled_path(self, path: Path) -> bool:
-        try:
-            relative_parts = path.relative_to(self.mods_dir).parts
-        except ValueError:
-            return False
-        return any(part.lower().startswith('disabled') for part in relative_parts)
-    
-    def install_mod(self) -> None:
-        for mod_file in self.mods_list:
-            console.print(f"[bold blue]Installing {mod_file.relative_to(self.mods_dir).as_posix()}[/bold blue]")
-            backedup_files = self.backup_original_files(mod_file)
-            for target_file in backedup_files.keys():
-                shutil.copy2(mod_file, target_file)
-                console.print(f"[yellow]  - Applied {mod_file.relative_to(self.mods_dir).as_posix()} to {target_file.as_posix()}[/yellow]")
-    
-    def backup_original_files(self, mod_file: Path) -> dict[Path, list[Path]]:
-        backedup_files = defaultdict[Path, list[Path]](list)
-        original_files = self.find_original_files(mod_file)
-        for original_file in original_files:
-            if self.get_file_hash(original_file) == self.get_file_hash(mod_file):
-                console.print(f"[yellow]  - Skip backing up {original_file.as_posix()} because it is the same as the mod file[/yellow]")
-                continue
-            relative_path = original_file.relative_to(self.game_resource_dir).parts
-            backup_file_name = original_file.name + ".backup." + ".".join(relative_path[:-1])
-            shutil.copy2(original_file, mod_file.parent / backup_file_name)
+        self.hide_console_chk = QCheckBox("Minimize to Tray when running")
+        self.hide_console_chk.setChecked(self.vm.get_hide_console())
+
+        form.addRow("Game Executable:", game_path_layout)
+        form.addRow("Mods Directory:", mods_dir_layout)
+        form.addRow("Mod Extension:", self.mod_ext_edit)
+        form.addRow("", self.restore_chk)
+        form.addRow("", self.hide_console_chk)
+
+        layout.addLayout(form)
+
+        save_btn = QPushButton("Save")
+        save_btn.setObjectName("saveButton")
+        save_btn.clicked.connect(self.save_settings)
+        layout.addWidget(save_btn)
+
+    def browse_game_path(self):
+        f, _ = QFileDialog.getOpenFileName(self, "Select Game Executable", "", "Executable (*.exe)")
+        if f:
+            self.game_path_edit.setText(f)
             
-            backedup_files[original_file].append(mod_file.parent / backup_file_name)
-            console.print(f"[green]  - Backed up {original_file.as_posix()}[/green]")
-        return backedup_files
-    
-    def restore_all(self) -> None:
-        for mod_file in self.mods_list:
-            self.restore_original_files(mod_file)
-    
-    def restore_original_files(self, mod_file: Path) -> None:
-        console.print(f"[bold blue]Restoring original files for {mod_file.relative_to(self.mods_dir).as_posix()}[/bold blue]")
-        prefix = f"{mod_file.name}.backup."
-        for backup in self.mods_dir.rglob(f"{prefix}*"):
-            if not backup.is_file():
-                continue
-            suffix = backup.name[len(prefix):]
-            relative_parts = [part for part in suffix.split(".") if part]
-            target_path = self.game_resource_dir.joinpath(*relative_parts, mod_file.name)
-            shutil.copy2(backup, target_path)
-            backup.unlink()
-            console.print(f"[green]  - Restored {target_path.as_posix()}[/green]")
+    def browse_mods_dir(self):
+        d = QFileDialog.getExistingDirectory(self, "Select Mods Directory")
+        if d:
+            self.mods_dir_edit.setText(d)
 
-    def find_original_files(self, mod_file: Path) -> list[Path]:
-        return list(self.game_resource_dir.rglob(mod_file.name))
+    def save_settings(self):
+        self.vm.set_game_path(self.game_path_edit.text())
+        self.vm.set_mods_dir(self.mods_dir_edit.text())
+        self.vm.set_mod_ext(self.mod_ext_edit.text())
+        self.vm.set_restore(self.restore_chk.isChecked())
+        self.vm.set_hide_console(self.hide_console_chk.isChecked())
+        self.accept()
 
-    def get_file_hash(self, file_path: Path) -> str:
-        return hashlib.sha256(file_path.read_bytes()).hexdigest()
+# --- Main Window ---
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("StellaSora Mod Launcher")
+        self.setMinimumSize(600, 500)
 
-class StellaSoraGame:
-    def __init__(self, game_exe_path: Path) -> None:
-        self.game_exe_path = Path(game_exe_path)
-        self.process_handle: subprocess.Popen | None = None
-    
-    def start(self) -> None:
-        # Use 'start' command via cmd to launch game in a completely separate process
-        # This breaks the parent-child console relationship entirely
-        subprocess.Popen(
-            f'start "" "{self.game_exe_path}"',
-            shell=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            stdin=subprocess.DEVNULL,
-        )
-        self.process_handle = None  # We can't get handle from 'start' command
-
-    def get_process(self) -> psutil.Process | None:
-        """Get the game process object using psutil"""
-        for proc in psutil.process_iter(['name']):  # pyright: ignore[reportUnknownMemberType]
-            try:
-                if proc.info['name'].lower() == self.game_exe_path.name.lower():
-                    return proc
-            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-                pass
-        return None
-
-    def is_running(self) -> bool:
-        # Check if game process is running using psutil
-        return self.get_process() is not None
-
-    def wait_for_game_closed(self) -> bool:
-        """
-        Blocks execution until the game process closes, using low CPU consumption.
-        Returns True if process was successfully monitored and closed, False otherwise.
-        """
-        # Wait for game process to appear (up to 10 seconds)
-        proc = None
-        for _ in range(10):
-            proc = self.get_process()
-            if proc:
-                break
-            time.sleep(1)
+        self.vm = MainViewModel()
+        self.is_running = False
         
-        if not proc:
-            return False
-        
-        # Wait for process to close using psutil
-        try:
-            proc.wait()
-        except psutil.NoSuchProcess:
-            pass
-        
-        # Final safety check to ensure process is closed
-        while self.is_running():
-            time.sleep(1)
-        
-        return True
+        # Connect Signals
+        self.vm.mods_list_changed.connect(self.update_mod_list)
+        self.vm.log_message.connect(self.append_log)
+        self.vm.game_status_changed.connect(self.on_game_status_changed)
 
-def main():
-    config_file = 'config.ini'
-    config = Config(config_file)
-    GAME_EXE_PATH = config.GameExePath.get()
-    TARGET_EXE_NAME = config.TargetExeName.get() or config.TargetExeName.set("StellaSora.exe")
-    MODS_DIR = config.ModsDir.get()
-    MOD_EXTENSION = config.ModExtension.get() or config.ModExtension.set(".unity3d")
-    RESTORE_ORIGINAL_FILE_WHEN_CLOSED = config.RestoreOriginalFileWhenGameClosed.get()
-    HIDE_CONSOLE_WHEN_RUNNING = config.HideConsoleWhenRunning.get()
+        self.setup_ui()
+        self.setup_tray()
 
-    if not GAME_EXE_PATH or not Path(GAME_EXE_PATH).exists() or TARGET_EXE_NAME.lower() not in GAME_EXE_PATH.lower():
-        console.print(full_width_line("-"), style="blue")
-        console.print("Game executable path missing or not valid, please select the game executable", style="bold bright_blue")
-        GAME_EXE_PATH = filedialog.askopenfilename(filetypes=[(TARGET_EXE_NAME, TARGET_EXE_NAME)])
-        config.GameExePath.set(GAME_EXE_PATH)
-        clear_line()
-        console.print(Text(f"Game executable path set to ", style="bright_blue") + Text(GAME_EXE_PATH, style="yellow"))
-        console.print(full_width_line("-"), style="blue")
-    
-    if not MODS_DIR:
-        mods_dir = Path(PROGRAM_PATH).absolute() / "Mods"
-        mods_dir.mkdir(parents=True, exist_ok=True)
-        MODS_DIR = mods_dir.as_posix()
-        config.ModsDir.set(MODS_DIR)
-        console.print("Mods directory not found", style="bold yellow")
-        console.print(Text(f"Using default directory: ", style="bright_blue") + Text(MODS_DIR, style="yellow"))
-        console.print(full_width_line("-"), style="blue")
-    
-    if RESTORE_ORIGINAL_FILE_WHEN_CLOSED is None:
-        console.print("Do you need to restore the original files when game is closed?", style="bold bright_blue")
-        console.print("  - [Y] Yes, restore the original files when game is closed (recommended)", style="yellow")
-        console.print("  - [N] No, do not restore the original files when game is closed", style="yellow")
-        console.print("  - Default is Enabled", style="bold yellow")
-        RESTORE_ORIGINAL_FILE_WHEN_CLOSED = input("Enter your choice: ")
-        if RESTORE_ORIGINAL_FILE_WHEN_CLOSED.lower() == "y":
-            RESTORE_ORIGINAL_FILE_WHEN_CLOSED = True
-        elif RESTORE_ORIGINAL_FILE_WHEN_CLOSED.lower() == "n":
-            RESTORE_ORIGINAL_FILE_WHEN_CLOSED = False
-        elif RESTORE_ORIGINAL_FILE_WHEN_CLOSED.lower() == "":
-            RESTORE_ORIGINAL_FILE_WHEN_CLOSED = True
+        # Initial Load
+        self.vm.load_mods()
+
+        # Check if first run
+        if not self.vm.config.GameExePath.get():
+             self.open_settings()
+
+    def setup_ui(self):
+        central = QWidget()
+        self.setCentralWidget(central)
+        layout = QVBoxLayout(central)
+
+        # Top buttons
+        top_layout = QHBoxLayout()
+        
+        self.launch_btn = QPushButton("Launch Game")
+        self.launch_btn.setIcon(MaterialIcon('play_arrow', fill=True))
+        self.launch_btn.setIconSize(QSize(30, 30))
+        self.launch_btn.setObjectName("launchButton")
+        self.launch_btn.clicked.connect(self.vm.launch_game)
+
+        self.settings_btn = QPushButton("Settings")
+        self.settings_btn.setIcon(MaterialIcon('settings'))
+        self.settings_btn.setIconSize(QSize(30, 30))
+        self.settings_btn.setObjectName("settingsButton")
+        self.settings_btn.clicked.connect(self.open_settings)
+
+        self.refresh_btn = QPushButton("Refresh")
+        self.refresh_btn.setIcon(MaterialIcon('refresh'))
+        self.refresh_btn.setIconSize(QSize(30, 30))
+        self.refresh_btn.setObjectName("refreshButton")
+        self.refresh_btn.clicked.connect(self.vm.load_mods)
+        
+        top_layout.addWidget(self.settings_btn)
+        top_layout.addWidget(self.refresh_btn)
+        top_layout.addStretch(1)
+        top_layout.addWidget(self.launch_btn)
+        layout.addLayout(top_layout)
+
+        # Mod List
+        mods_label = QLabel("Mods:")
+        mods_label.setObjectName("sectionLabel")
+        layout.addWidget(mods_label)
+        self.mod_list_widget = QListWidget()
+        self.mod_list_widget.setObjectName("modListWidget")
+        self.mod_list_widget.itemChanged.connect(self.on_mod_item_changed)
+        layout.addWidget(self.mod_list_widget)
+        
+        # Log
+        log_label = QLabel("Log:")
+        log_label.setObjectName("sectionLabel")
+        layout.addWidget(log_label)
+        self.log_text = QTextEdit()
+        self.log_text.setObjectName("logTextEdit")
+        self.log_text.setReadOnly(True)
+        self.log_text.setFixedHeight(150)
+        layout.addWidget(self.log_text)
+        
+    def setup_tray(self):
+        self.tray_icon = QSystemTrayIcon(self)
+        
+        icon_path = get_app_icon_path()
+        if icon_path.exists():
+            self.tray_icon.setIcon(QIcon(str(icon_path)))
         else:
-            console.print("Invalid choice, default is Enabled", style="yellow")
-            RESTORE_ORIGINAL_FILE_WHEN_CLOSED = True
-        config.RestoreOriginalFileWhenGameClosed.set(RESTORE_ORIGINAL_FILE_WHEN_CLOSED)
-        clear_line()
-        console.print(
-            Text("Restore original files when game is closed set to ", style="bright_blue")
-            + status_text(RESTORE_ORIGINAL_FILE_WHEN_CLOSED)
-        )
-        console.print()
-    RESTORE_ORIGINAL_FILE_WHEN_CLOSED = bool(RESTORE_ORIGINAL_FILE_WHEN_CLOSED)
-    
-    if HIDE_CONSOLE_WHEN_RUNNING is None:
-        HIDE_CONSOLE_WHEN_RUNNING = True
-        config.HideConsoleWhenRunning.set(HIDE_CONSOLE_WHEN_RUNNING)
-    
-    console.rule(Text("Configuration", style="bold"), style="white")
-    console.rule(Text(f"You can change settings in the {config_file} file", style="green"), characters=" ")
-    console.rule(Text("Or delete it to restart the configuration wizard.", style="green"), characters=" ")
-    console.print(full_width_line("-"))
-    console.print(Text("Game executable path: ", style="bright_blue") + Text(GAME_EXE_PATH, style="yellow"))
-    console.print(Text("Target executable name: ", style="bright_blue") + Text(TARGET_EXE_NAME, style="yellow"))
-    console.print(Text("Mods directory: ", style="bright_blue") + Text(MODS_DIR, style="yellow"))
-    console.print(Text("Mods extension: ", style="bright_blue") + Text(MOD_EXTENSION, style="yellow"))
-    console.print(Text("Restore original files when game is closed: ", style="bright_blue") + status_text(RESTORE_ORIGINAL_FILE_WHEN_CLOSED))
-    console.print(Text("Hide console windows when running: ", style="bright_blue") + status_text(HIDE_CONSOLE_WHEN_RUNNING))
+            pixmap = QIcon.fromTheme("system-run").pixmap(64, 64)
+            self.tray_icon.setIcon(QIcon(pixmap))
 
-    loader = StellaSoraModLoader(Path(GAME_EXE_PATH).parent, Path(MODS_DIR), MOD_EXTENSION)
-    
-    game = StellaSoraGame(Path(GAME_EXE_PATH))
-    
-    if game.is_running():
-        console.print("Game is running, please close it before installing mods\nProgram will exit...", style="bold yellow")
-        input("Press Enter to exit...")
-        return
-    
-    console.rule(Text("Installing", style="bold"), style="white")
-    loader.install_mod()
-    console.print("Mods installed successfully", style="bold green")
-    
-    console.rule(Text("Start Game", style="bold"), style="white")
-    console.rule(Text("Game status: ", style="bright_blue") + Text("Starting game...", style="bold green"), characters=" ")
-    game.start()
-    if not RESTORE_ORIGINAL_FILE_WHEN_CLOSED:
-        console.print(full_width_line("─"))
-        console.print("Mods will not be restored when game is closed, program will exit...", style="bold yellow")
-        countdown_exit()
-        return
-    
-    # wait for game to spawn process
-    time.sleep(1)
-    
-    clear_line()
-    console.rule(Text("Game status: ", style="bright_blue") + Text("Running", style="bold green"), characters=" ")
-    console.rule(Text("Please do not close this window", style="bold yellow"), characters=" ")
-    console.rule(Text("Waiting for the restore after the game is closed...", style="bold yellow"), characters=" ")
-    console.print(full_width_line("─"))
+        menu = QMenu()
+        show_action = QAction("Show", self)
+        show_action.triggered.connect(self.show_window)
+        quit_action = QAction("Quit", self)
+        app_instance = QApplication.instance()
+        if app_instance:
+            quit_action.triggered.connect(app_instance.quit)
 
-    time.sleep(3)
+        menu.addAction(show_action)
+        menu.addAction(quit_action)
+        self.tray_icon.setContextMenu(menu)
+        self.tray_icon.activated.connect(self.on_tray_activated)
+        
+        self.tray_icon.show()
 
-    tray_icon = None
-    if HIDE_CONSOLE_WHEN_RUNNING:
-        tray_icon = minimize_to_tray()
+    def closeEvent(self, event: QCloseEvent) -> None:
+        # ซ่อนไปที่ tray แทนที่จะปิด
+        event.ignore()
+        if self.is_running:
+            self.hide()
+            self.tray_icon.showMessage(
+                "StellaSora Mod Loader", 
+                "Game is running. Minimized to tray.", 
+                QSystemTrayIcon.MessageIcon.Information, 
+                2000
+            )
+        else:
+            app_instance = QApplication.instance()
+            if app_instance:
+                app_instance.quit()
+            else:
+                sys.exit(0)
 
-    game.wait_for_game_closed()
+    def show_window(self):
+        self.show()
+        self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
+        self.activateWindow()
 
-    if HIDE_CONSOLE_WHEN_RUNNING:
-        show_console()
-        if tray_icon:
-            try:
-                tray_icon.stop()
-            except Exception:
-                pass
+    def on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
+        if reason == QSystemTrayIcon.ActivationReason.Trigger:
+            if self.isVisible():
+                if self.isMinimized():
+                     self.show_window()
+                else:
+                     self.hide()
+            else:
+                self.show_window()
 
-    clear_line(4)
-    console.rule(Text("Game status: ", style="bright_blue") + Text("Game closed detected", style="bold red"), characters=" ")
-    console.print(full_width_line("─"))
-    
-    time.sleep(1)
-    
-    clear_line()
-    console.rule(Text("Restore Original Files", style="bold"), style="white")
-    loader.restore_all()
-    console.print("Mods restored successfully", style="bold green")
-    console.print(full_width_line("─"))
-    
-    countdown_exit()
-    sys.exit(0)
+    def open_settings(self):
+        dlg = SettingsDialog(self)
+        if dlg.exec():
+            self.vm.reload_config()
+            self.vm.load_mods()
+            self.append_log("Settings saved.")
+
+    def update_mod_list(self, mods_data: list[ModData]) -> None:
+        self.mod_list_widget.blockSignals(True)
+        self.mod_list_widget.clear()
+
+        for mod in mods_data:
+            item = QListWidgetItem(mod["name"])
+            item.setData(Qt.ItemDataRole.UserRole, mod["path"])
+            item.setCheckState(Qt.CheckState.Checked if mod["enabled"] else Qt.CheckState.Unchecked)
+            self.mod_list_widget.addItem(item)
+
+        self.mod_list_widget.blockSignals(False)
+
+    def on_mod_item_changed(self, item: QListWidgetItem) -> None:
+        mod_path: Any = item.data(Qt.ItemDataRole.UserRole)
+        checked = item.checkState() == Qt.CheckState.Checked
+        # Delegate to ViewModel
+        self.vm.toggle_mod(mod_path, checked)
+
+    def append_log(self, msg: str) -> None:
+        self.log_text.append(msg)
+
+    def on_game_status_changed(self, is_running: bool) -> None:
+        self.is_running = is_running
+        self.launch_btn.setEnabled(not is_running)
+        self.launch_btn.setText("Launch Game" if not is_running else "Game is running")
+        self.refresh_btn.setEnabled(not is_running)
+        self.settings_btn.setEnabled(not is_running)
+        self.mod_list_widget.setEnabled(not is_running)
+
+        if is_running and self.vm.config.HideConsoleWhenRunning.get():
+             self.hide()
+             self.tray_icon.showMessage("StellaSora Mod Loader", "Game is running. Minimized to tray.", QSystemTrayIcon.MessageIcon.Information, 3000)
+        elif not is_running and self.vm.config.HideConsoleWhenRunning.get():
+             self.show_window()
+
 if __name__ == "__main__":
-    main()
+    app = QApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(False)
+    
+    # Apply Fusion style and load QSS stylesheet
+    app.setStyle("Fusion")
+    stylesheet = load_stylesheet()
+    if stylesheet:
+        app.setStyleSheet(stylesheet)
+    
+    window = MainWindow()
+    window.show()
+    
+    sys.exit(app.exec())

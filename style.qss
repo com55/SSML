@@ -1,0 +1,312 @@
+/* ============================================
+   StellaSora Mod Loader - Dark Theme StyleSheet
+   ============================================ */
+
+/* --- Global Application Theme --- */
+QWidget {
+    background-color: #2b2b2b;
+    color: #ffffff;
+    font-family: "Segoe UI", Arial, sans-serif;
+}
+
+QMainWindow {
+    background-color: #2b2b2b;
+}
+
+/* --- Base Button Style --- */
+QPushButton {
+    font-size: 14px;
+    padding: 8px 16px;
+    background-color: #434343;
+    color: white;
+    border: none;
+    border-radius: 4px;
+}
+
+QPushButton:hover {
+    background-color: #525252;
+}
+
+QPushButton:pressed {
+    background-color: #3a3a3a;
+}
+
+QPushButton:disabled {
+    background-color: #2a2a2a;
+    color: #666666;
+}
+
+/* --- Launch Button (Primary Action) --- */
+QPushButton#launchButton {
+    font-size: 16px;
+    font-weight: bold;
+    padding: 10px 20px;
+    background-color: #4CAF50;
+    color: white;
+    border-radius: 4px;
+}
+
+QPushButton#launchButton:hover {
+    background-color: #5CBF60;
+}
+
+QPushButton#launchButton:pressed {
+    background-color: #3D9140;
+}
+
+QPushButton#launchButton:disabled {
+    background-color: #2d5a30;
+    color: #888888;
+}
+
+/* --- Settings Button --- */
+QPushButton#settingsButton {
+    font-size: 16px;
+    font-weight: bold;
+    padding: 10px 20px;
+    background-color: #434343;
+    color: white;
+}
+
+QPushButton#settingsButton:hover {
+    background-color: #525252;
+}
+
+QPushButton#settingsButton:disabled {
+    background-color: #404040;
+    color: #666666;
+}
+
+/* --- Refresh Button --- */
+QPushButton#refreshButton {
+    font-size: 16px;
+    font-weight: bold;
+    padding: 10px 20px;
+    background-color: #434343;
+    color: white;
+}
+
+QPushButton#refreshButton:hover {
+    background-color: #525252;
+}
+
+QPushButton#refreshButton:disabled {
+    background-color: #404040;
+    color: #666666;
+}
+
+/* --- Browse Button (in Settings Dialog) --- */
+QPushButton#browseButton {
+    padding: 6px 12px;
+    background-color: #505050;
+}
+
+QPushButton#browseButton:hover {
+    background-color: #606060;
+}
+
+/* --- Save Button (in Settings Dialog) --- */
+QPushButton#saveButton {
+    font-size: 14px;
+    font-weight: bold;
+    padding: 10px 20px;
+    background-color: #42a5f5;
+    color: white;
+}
+
+QPushButton#saveButton:hover {
+    background-color: #5cb6f7;
+}
+
+QPushButton#saveButton:pressed {
+    background-color: #3294e4;
+}
+
+/* --- Labels --- */
+QLabel {
+    color: #ffffff;
+    font-size: 13px;
+}
+
+QLabel#sectionLabel {
+    font-weight: bold;
+    font-size: 14px;
+    color: #cccccc;
+    margin-top: 5px;
+}
+
+/* --- List Widget (Mod List) --- */
+QListWidget {
+    background-color: #1e1e1e;
+    color: #ffffff;
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+    padding: 4px;
+}
+
+QListWidget::item {
+    padding: 6px 4px;
+    border-bottom: 1px solid #2a2a2a;
+}
+
+QListWidget::item:hover {
+    background-color: #333333;
+}
+
+QListWidget::item:selected {
+    background-color: #42a5f5;
+    color: #000000;
+}
+
+QListWidget:disabled {
+    background-color: #252525;
+    color: #555555;
+}
+
+/* --- Text Edit (Log) --- */
+QTextEdit {
+    background-color: #1e1e1e;
+    color: #ffffff;
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+    padding: 6px;
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 12px;
+}
+
+QTextEdit#logTextEdit {
+    background-color: #1a1a1a;
+}
+
+/* --- Line Edit (Input Fields) --- */
+QLineEdit {
+    background-color: #1e1e1e;
+    color: #ffffff;
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-size: 13px;
+}
+
+QLineEdit:focus {
+    border-color: #42a5f5;
+}
+
+QLineEdit:disabled {
+    background-color: #252525;
+    color: #666666;
+}
+
+/* --- Check Box --- */
+QCheckBox {
+    color: #ffffff;
+    font-size: 13px;
+    spacing: 8px;
+}
+
+QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+    border: 2px solid #555555;
+    border-radius: 3px;
+    background-color: #1e1e1e;
+}
+
+QCheckBox::indicator:hover {
+    border-color: #42a5f5;
+}
+
+QCheckBox::indicator:checked {
+    image: url(resources/check-solid.svg);
+    border-color: #42a5f5;
+}
+
+QCheckBox::indicator:checked:hover {
+    background-color: #5cb6f7;
+    border-color: #5cb6f7;
+}
+
+/* --- Dialog --- */
+QDialog {
+    background-color: #2b2b2b;
+}
+
+QDialog#settingsDialog {
+    background-color: #2b2b2b;
+}
+
+/* --- Scrollbar --- */
+QScrollBar:vertical {
+    background-color: #1e1e1e;
+    width: 12px;
+    border-radius: 6px;
+}
+
+QScrollBar::handle:vertical {
+    background-color: #4a4a4a;
+    min-height: 20px;
+    border-radius: 5px;
+    margin: 2px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background-color: #5a5a5a;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+QScrollBar:horizontal {
+    background-color: #1e1e1e;
+    height: 12px;
+    border-radius: 6px;
+}
+
+QScrollBar::handle:horizontal {
+    background-color: #4a4a4a;
+    min-width: 20px;
+    border-radius: 5px;
+    margin: 2px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background-color: #5a5a5a;
+}
+
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
+    width: 0px;
+}
+
+/* --- Menu (for System Tray) --- */
+QMenu {
+    background-color: #2b2b2b;
+    border: 1px solid #3a3a3a;
+    padding: 4px;
+}
+
+QMenu::item {
+    padding: 6px 20px;
+    color: #ffffff;
+}
+
+QMenu::item:selected {
+    background-color: #42a5f5;
+    color: #000000;
+}
+
+/* --- ToolTip --- */
+QToolTip {
+    background-color: #2b2b2b;
+    color: #ffffff;
+    border: 1px solid #42a5f5;
+    padding: 4px;
+}
+
+/* --- Form Layout Labels --- */
+QFormLayout QLabel {
+    min-width: 120px;
+}
+
