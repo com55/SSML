@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                                QTextEdit, QLabel, QFileDialog, QCheckBox, QDialog,
                                QFormLayout, QLineEdit, QSystemTrayIcon, QMenu, QHeaderView,
                                QMessageBox)
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QSize, Qt, QFileSystemWatcher, QTimer
 from PySide6.QtGui import QCloseEvent, QIcon, QAction, QBrush, QColor, QFont
 from qt_material_icons import MaterialIcon
 
@@ -53,6 +53,15 @@ class SettingsDialog(QDialog):
         mods_dir_layout.addWidget(self.mods_dir_edit)
         mods_dir_layout.addWidget(mods_dir_btn)
 
+        self.backups_dir_edit = QLineEdit(self.vm.get_backups_dir())
+        self.backups_dir_edit.setCursorPosition(0)
+        backups_dir_btn = QPushButton("Browse")
+        backups_dir_btn.setObjectName("browseButton")
+        backups_dir_btn.clicked.connect(self.browse_backups_dir)
+        backups_dir_layout = QHBoxLayout()
+        backups_dir_layout.addWidget(self.backups_dir_edit)
+        backups_dir_layout.addWidget(backups_dir_btn)
+
         self.mod_ext_edit = QLineEdit(self.vm.get_mod_ext())
 
         self.hide_console_chk = QCheckBox("Minimize to Tray when running")
@@ -60,6 +69,7 @@ class SettingsDialog(QDialog):
 
         form.addRow("Game Executable:", game_path_layout)
         form.addRow("Mods Directory:", mods_dir_layout)
+        form.addRow("Backups Directory:", backups_dir_layout)
         form.addRow("Mod Extension:", self.mod_ext_edit)
         form.addRow("", self.hide_console_chk)
 
@@ -80,9 +90,15 @@ class SettingsDialog(QDialog):
         if d:
             self.mods_dir_edit.setText(d)
 
+    def browse_backups_dir(self):
+        d = QFileDialog.getExistingDirectory(self, "Select Backups Directory")
+        if d:
+            self.backups_dir_edit.setText(d)
+
     def save_settings(self):
         self.vm.set_game_path(self.game_path_edit.text())
         self.vm.set_mods_dir(self.mods_dir_edit.text())
+        self.vm.set_backups_dir(self.backups_dir_edit.text())
         self.vm.set_mod_ext(self.mod_ext_edit.text())
         self.vm.set_hide_console(self.hide_console_chk.isChecked())
         self.accept()
@@ -104,6 +120,7 @@ class MainWindow(QMainWindow):
 
         self.setup_ui()
         self.setup_tray()
+        self.setup_file_watcher()
 
         # Initial Load
         self.vm.load_mods()
@@ -146,11 +163,31 @@ class MainWindow(QMainWindow):
         top_layout.addStretch(1)
         top_layout.addWidget(self.launch_btn)
         layout.addLayout(top_layout)
+        
+        layout.addSpacing(5)
 
-        # Mod List
+        # Mod List Header with master toggle buttons
+        mods_header_layout = QHBoxLayout()
         mods_label = QLabel("Mods:")
         mods_label.setObjectName("sectionLabel")
-        layout.addWidget(mods_label)
+        mods_header_layout.addWidget(mods_label)
+        mods_header_layout.addStretch(1)
+        
+        self.enable_all_btn = QPushButton("Enable All")
+        self.enable_all_btn.setObjectName("folderEnableButton")
+        self.enable_all_btn.setFixedSize(80, 24)
+        self.enable_all_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.enable_all_btn.clicked.connect(lambda: self.on_master_toggle(True))
+        
+        self.disable_all_btn = QPushButton("Disable All")
+        self.disable_all_btn.setObjectName("folderDisableButton")
+        self.disable_all_btn.setFixedSize(80, 24)
+        self.disable_all_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.disable_all_btn.clicked.connect(lambda: self.on_master_toggle(False))
+        
+        mods_header_layout.addWidget(self.enable_all_btn)
+        mods_header_layout.addWidget(self.disable_all_btn)
+        layout.addLayout(mods_header_layout)
         self.mod_tree_widget = QTreeWidget()
         self.mod_tree_widget.setObjectName("modTreeWidget")
         self.mod_tree_widget.setColumnCount(2)
@@ -176,6 +213,39 @@ class MainWindow(QMainWindow):
         self.log_text.setFixedHeight(150)
         layout.addWidget(self.log_text)
         
+    def setup_file_watcher(self):
+        """Setup file system watcher to auto-refresh when Mods folder changes."""
+        self.file_watcher = QFileSystemWatcher()
+        mods_dir = self.vm.config.ModsDir.get()
+        
+        if mods_dir:
+            mods_path = Path(mods_dir)
+            if mods_path.exists():
+                # Watch the mods directory
+                self.file_watcher.addPath(str(mods_path))
+                # Watch subdirectories
+                for subdir in mods_path.rglob("*"):
+                    if subdir.is_dir():
+                        self.file_watcher.addPath(str(subdir))
+        
+        # Debounce timer to prevent rapid refreshes
+        self.refresh_timer = QTimer()
+        self.refresh_timer.setSingleShot(True)
+        self.refresh_timer.timeout.connect(self.on_files_changed)
+        
+        self.file_watcher.directoryChanged.connect(self.schedule_refresh)
+        self.file_watcher.fileChanged.connect(self.schedule_refresh)
+
+    def schedule_refresh(self, path: str):
+        """Schedule a refresh with debounce to avoid rapid updates."""
+        # Restart timer on each change (debounce 500ms)
+        self.refresh_timer.start(500)
+
+    def on_files_changed(self):
+        """Called when files change after debounce period."""
+        if not self.is_running:  # Don't refresh while game is running
+            self.vm.load_mods()
+
     def setup_tray(self):
         self.tray_icon = QSystemTrayIcon(self)
         
@@ -367,6 +437,10 @@ class MainWindow(QMainWindow):
             if mod["enabled"] != enable:
                 # Use on_toggle_clicked to handle conflict detection
                 self.on_toggle_clicked(mod["path"], enable)
+
+    def on_master_toggle(self, enable: bool) -> None:
+        """Handle master enable/disable all mods."""
+        self.vm.toggle_all_mods(enable)
 
     def append_log(self, msg: str) -> None:
         self.log_text.append(msg)

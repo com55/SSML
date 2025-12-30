@@ -22,13 +22,24 @@ class GameLauncherWorker(QThread):
     def run(self):
         game_exe = Path(self.config.GameExePath.get() or "")
         mods_dir = Path(self.config.ModsDir.get() or "")
+        backups_dir = Path(self.config.BackupsDir.get() or "")
         mod_ext = self.config.ModExtension.get() or ".unity3d"
 
-        loader = StellaSoraModLoader(game_exe.parent, mods_dir, mod_ext, logger=self.log_message)
+        loader = StellaSoraModLoader(game_exe.parent, mods_dir, backups_dir, mod_ext, logger=self.log_message)
         game = StellaSoraGame(game_exe)
 
         if game.is_running():
             self.log_message("Game is already running! Please close it first.")
+            self.finished_signal.emit()
+            return
+
+        # Sync mods and handle orphaned ones before launch
+        try:
+            orphaned = loader.sync_mods()
+            if orphaned:
+                loader.restore_orphaned_backups(orphaned)
+        except Exception as e:
+            self.log_message(f"Error syncing mods: {e}")
             self.finished_signal.emit()
             return
 
@@ -72,6 +83,11 @@ class MainViewModel(QObject):
             default_mods = get_exe_path("Mods")
             default_mods.mkdir(parents=True, exist_ok=True)
             self.config.ModsDir.set(default_mods.as_posix())
+        
+        if not self.config.BackupsDir.get():
+            default_backups = get_exe_path("Backups")
+            default_backups.mkdir(parents=True, exist_ok=True)
+            self.config.BackupsDir.set(default_backups.as_posix())
 
     def reload_config(self):
         self.config.reload()
@@ -82,10 +98,12 @@ class MainViewModel(QObject):
         game_exe_str = self.config.GameExePath.get() or ""
         game_resource_dir = Path(game_exe_str).parent if game_exe_str else Path(".")
         mods_dir_str = self.config.ModsDir.get() or ""
+        backups_dir_str = self.config.BackupsDir.get() or ""
         mod_ext = self.config.ModExtension.get() or ".unity3d"
         return StellaSoraModLoader(
             game_resource_dir, 
-            Path(mods_dir_str), 
+            Path(mods_dir_str),
+            Path(backups_dir_str),
             mod_ext,
             logger=lambda msg: self.log_message.emit(msg)
         )
@@ -96,8 +114,17 @@ class MainViewModel(QObject):
             self.log_message.emit("Mods directory invalid.")
             return
 
-        # Sync mod status with actual files
-        self.loader.sync_mods()
+        # Sync mod status with actual files and detect orphaned mods
+        orphaned = self.loader.sync_mods()
+        
+        # Restore game files for orphaned mods (enabled but file deleted/moved)
+        if orphaned:
+            self.loader.restore_orphaned_backups(orphaned)
+            for entry in orphaned:
+                self.log_message.emit(f"Restored game file: {entry['path']} (mod removed or moved)")
+        
+        # Cleanup empty folders in Backups directory
+        self.loader.cleanup_empty_backup_folders()
 
         mods = self.loader.get_mods_list()
         mod_data = []
@@ -134,6 +161,27 @@ class MainViewModel(QObject):
         except Exception as e:
             self.log_message.emit(f"Error toggling mod: {e}")
 
+    def toggle_all_mods(self, enable: bool):
+        """Enable or disable all mods at once."""
+        try:
+            mods = self.loader.get_mods_list()
+            count = 0
+            for mod in mods:
+                is_currently_enabled = not self.loader.is_disabled(mod)
+                if is_currently_enabled != enable:
+                    self.loader.toggle_mod(mod, enable)
+                    count += 1
+            
+            if count > 0:
+                msg = "enabled" if enable else "disabled"
+                self.log_message.emit(f"All mods {msg}: {count} mod(s)")
+                self.load_mods()  # Refresh list
+            else:
+                msg = "enabled" if enable else "disabled"
+                self.log_message.emit(f"All mods already {msg}")
+        except Exception as e:
+            self.log_message.emit(f"Error toggling all mods: {e}")
+
     def launch_game(self):
         if not self.config.GameExePath.get():
             self.log_message.emit("Error: Game executable path not set!")
@@ -168,6 +216,12 @@ class SettingsViewModel(QObject):
 
     def set_mods_dir(self, val: str) -> None:
         self.config.ModsDir.set(val)
+
+    def get_backups_dir(self):
+        return self.config.BackupsDir.get() or ""
+
+    def set_backups_dir(self, val: str) -> None:
+        self.config.BackupsDir.set(val)
 
     def get_mod_ext(self):
         return self.config.ModExtension.get() or ".unity3d"

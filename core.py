@@ -83,6 +83,7 @@ class Config:
 
         self.GameExePath = StringConfig(self, 'Directory', 'game_exe_path')
         self.ModsDir = StringConfig(self, 'Directory', 'mods_dir')
+        self.BackupsDir = StringConfig(self, 'Directory', 'backups_dir')
         self.TargetExeName = StringConfig(self, 'Settings', 'target_exe_name')
         self.ModExtension = StringConfig(self, 'Settings', 'mod_extension')
 
@@ -134,12 +135,13 @@ class ModsStatusManager:
         """Get relative path from mods_dir as posix string."""
         return file_path.relative_to(self.mods_dir).as_posix()
     
-    def sync_with_files(self) -> None:
+    def sync_with_files(self) -> list[ModStatusEntry]:
         """Sync status data with actual files in mods_dir.
         
-        - Add new files with enabled=True
+        - Add new files with enabled=False (default disabled)
         - Remove entries for files that no longer exist
-        - Update hash and reset to enabled if file content changed
+        - Update hash if file content changed
+        - Return list of orphaned enabled mods (enabled but file deleted/moved)
         """
         pattern = f"*{self.mod_extension}"
         current_files = list(self.mods_dir.rglob(pattern))
@@ -154,6 +156,12 @@ class ModsStatusManager:
         
         # Build set of current file paths
         current_paths = {self._get_relative_path(f) for f in current_files}
+        
+        # Detect orphaned mods before removal (enabled but file no longer exists)
+        orphaned_mods: list[ModStatusEntry] = []
+        for entry in self._status_data:
+            if entry["path"] not in current_paths and entry["enabled"]:
+                orphaned_mods.append(entry.copy())
         
         # Remove entries for files that no longer exist
         self._status_data = [
@@ -191,6 +199,7 @@ class ModsStatusManager:
                 self._status_data.append(new_entry)
         
         self.save()
+        return orphaned_mods
     
     def get_status(self, file_path: Path) -> bool:
         """Get enabled status for a mod file. Returns False if not found."""
@@ -254,11 +263,13 @@ class StellaSoraModLoader:
         self,
         game_resource_dir: Path,
         mods_dir: Path,
+        backups_dir: Path,
         mod_extension: str,
         logger: Callable[[str], None] | None = None
     ) -> None:
         self.game_resource_dir = game_resource_dir
         self.mods_dir = mods_dir
+        self.backups_dir = backups_dir
         self.mod_extension = mod_extension
         self.logger: Callable[[str], None] = logger if logger else lambda msg: None
         self.status_manager = ModsStatusManager(mods_dir, mod_extension)
@@ -266,9 +277,43 @@ class StellaSoraModLoader:
     def log(self, message: str) -> None:
         self.logger(message)
 
-    def sync_mods(self) -> None:
-        """Sync mod status with actual files in mods_dir."""
-        self.status_manager.sync_with_files()
+    def sync_mods(self) -> list[ModStatusEntry]:
+        """Sync mod status with actual files in mods_dir.
+        
+        Returns list of orphaned enabled mods (enabled but file deleted/moved).
+        """
+        return self.status_manager.sync_with_files()
+
+    def restore_orphaned_backups(self, orphaned_entries: list[ModStatusEntry]) -> None:
+        """Restore game files for mods that were deleted/moved while enabled.
+        
+        Searches for backup files in Backups directory matching the orphaned mod paths.
+        """
+        if not orphaned_entries:
+            return
+        
+        self.log(f"Detected {len(orphaned_entries)} missing enabled mod(s), restoring game files...")
+        
+        for entry in orphaned_entries:
+            mod_rel_path = Path(entry["path"])
+            # Backup files are stored in Backups/{subfolder}/ with same structure as Mods
+            backup_subdir = self.backups_dir / mod_rel_path.parent
+            mod_name = mod_rel_path.name
+            
+            if not backup_subdir.exists():
+                self.log(f"  - No backup folder for {entry['path']}")
+                continue
+            
+            # Find backup files matching pattern: {mod_name}.backup.*
+            pattern = f"{mod_name}.backup.*"
+            backups_found = list(backup_subdir.glob(pattern))
+            
+            if not backups_found:
+                self.log(f"  - No backup found for {entry['path']}")
+                continue
+            
+            for backup in backups_found:
+                self.restore_backup_file(backup)
 
     def get_mods_list(self) -> list[Path]:
         pattern = f"*{self.mod_extension}"
@@ -305,10 +350,19 @@ class StellaSoraModLoader:
         self.status_manager.set_status(mod_path, enable)
     
     def _get_backup_path(self, mod_file: Path, game_file: Path) -> Path:
-        """Get the backup file path for a game file."""
+        """Get the backup file path in Backups directory with same subfolder structure as Mods."""
+        # Get relative path of mod from mods_dir (e.g. Chitose/char_2d_14401.unity3d)
+        mod_relative = mod_file.relative_to(self.mods_dir)
+        
+        # Create same subfolder structure in Backups
+        backup_subdir = self.backups_dir / mod_relative.parent
+        backup_subdir.mkdir(parents=True, exist_ok=True)
+        
+        # Backup name: {original_name}.backup.{game_path_parts} (no leading dot)
         relative_path = game_file.relative_to(self.game_resource_dir).parts
-        backup_file_name = "." + game_file.name + ".backup." + ".".join(relative_path[:-1])
-        return mod_file.parent / backup_file_name
+        backup_file_name = game_file.name + ".backup." + ".".join(relative_path[:-1])
+        
+        return backup_subdir / backup_file_name
     
     def _apply_mod(self, mod_path: Path) -> None:
         """Apply mod to game files with hash-based state detection."""
@@ -433,10 +487,7 @@ class StellaSoraModLoader:
                 self.log(f"  - Skip backing up {original_file.name} ({self._get_folder_name(original_file)}: same content)")
                 continue
 
-            relative_path = original_file.relative_to(self.game_resource_dir).parts
-            # Using specific backup naming convention with dot prefix to hide files
-            backup_file_name = "." + original_file.name + ".backup." + ".".join(relative_path[:-1])
-            backup_path = mod_file.parent / backup_file_name
+            backup_path = self._get_backup_path(mod_file, original_file)
             shutil.copy2(original_file, backup_path)
 
             backedup_files[original_file].append(backup_path)
@@ -444,20 +495,19 @@ class StellaSoraModLoader:
         return backedup_files
 
     def restore_all(self) -> None:
-        # Restore for all mods (even disabled ones if they left backups)
-        # Scan for all hidden backup files (starting with dot)
+        # Restore for all mods from Backups directory
         self.log("Restoring original files...")
-        backup_files = list(self.mods_dir.rglob(".*.backup.*"))
+        backup_files = list(self.backups_dir.rglob("*.backup.*"))
         for backup in backup_files:
              self.restore_backup_file(backup)
 
     def restore_backup_file(self, backup: Path) -> None:
         # Extract original info from backup name
-        # Name format: .{original_name}.backup.{path_parts_joined_by_dots}
-        # e.g. .mod.unity3d.backup.Folder1.Folder2
+        # Name format: {original_name}.backup.{path_parts_joined_by_dots}
+        # e.g. mod.unity3d.backup.Folder1.Folder2
 
         backup_name = backup.name
-        # Remove leading dot if present
+        # Remove leading dot if present (for legacy backups)
         if backup_name.startswith("."):
             backup_name = backup_name[1:]
 
@@ -489,6 +539,21 @@ class StellaSoraModLoader:
     
     def _get_folder_name(self, path: Path) -> str:
         return path.relative_to(self.game_resource_dir).parts[0]
+
+    def cleanup_empty_backup_folders(self) -> None:
+        """Remove empty folders in Backups directory."""
+        if not self.backups_dir.exists():
+            return
+        
+        # Walk directory tree bottom-up to remove empty folders
+        for folder in sorted(self.backups_dir.rglob("*"), key=lambda p: len(p.parts), reverse=True):
+            if folder.is_dir():
+                try:
+                    # Check if folder is empty
+                    if not any(folder.iterdir()):
+                        folder.rmdir()
+                except (OSError, PermissionError):
+                    pass  # Ignore errors when removing folders
     
 class StellaSoraGame:
     def __init__(self, game_exe_path: Path) -> None:
