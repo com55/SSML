@@ -1,6 +1,6 @@
 [project]
-name = "stellamodlauncher"
-version = "0.1.0"
+name = "SSML"
+version = "0.1.0-beta"
 description = "Stella Sora Mod Launcher"
 readme = "README.md"
 requires-python = ">=3.11"

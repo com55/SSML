@@ -2,12 +2,77 @@ name: StellaSoraModLauncher Build
 
 on:
   push:
+    branches:
+      - main
+      - master
     tags:
-      - 'v*' # Trigger when push tag startwith v (etc. v0.1.0)
-  workflow_dispatch: # Manual
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
+  # Job 1: Check version and create tag automatically when pushing to main/master
+  check-version:
+    if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+      tag_exists: ${{ steps.check_tag.outputs.exists }}
+      should_release: ${{ steps.check_tag.outputs.should_release }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version from pyproject.toml
+        id: get_version
+        run: |
+          VERSION=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Detected version: $VERSION"
+
+      - name: Check if tag exists
+        id: check_tag
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "Tag v$VERSION already exists"
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          else
+            echo "Tag v$VERSION does not exist"
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "should_release=true" >> $GITHUB_OUTPUT
+          fi
+
+  # Job 2: Create tag if version changed
+  create-tag:
+    needs: check-version
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Create and push tag
+        run: |
+          VERSION="${{ needs.check-version.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$VERSION" -m "Release v$VERSION"
+          git push origin "v$VERSION"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Job 3: Build Windows executable
   build-windows:
+    if: |
+      startsWith(github.ref, 'refs/tags/') ||
+      github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
 
     steps:
@@ -51,15 +116,26 @@ jobs:
           mkdir release_package
           mkdir release_package/StellaSoraModLauncher
           mkdir release_package/StellaSoraModLauncher/Mods
+          mkdir release_package/StellaSoraModLauncher/Backups
           Move-Item build/main.exe release_package/StellaSoraModLauncher/StellaSoraModLauncher.exe
-          Copy-Item default_config.ini release_package/StellaSoraModLauncher/config.ini
+        shell: powershell
+
+      - name: Get version for artifact name
+        id: get_version
+        run: |
+          if ("${{ github.ref }}" -match "refs/tags/v(.+)") {
+            $version = $matches[1]
+          } else {
+            $version = (Select-String -Path pyproject.toml -Pattern '^version = "(.+)"').Matches.Groups[1].Value
+          }
+          echo "version=$version" >> $env:GITHUB_OUTPUT
         shell: powershell
 
       - name: Upload Build Artifact (Manual/Test Only)
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
-          name: StellaSoraModLauncher-Windows-Build-Test
+          name: StellaSoraModLauncher-Windows-v${{ steps.get_version.outputs.version }}
           path: release_package/StellaSoraModLauncher
           include-hidden-files: true
 
@@ -72,6 +148,11 @@ jobs:
 
       - name: Upload Release Asset (Tag Only)
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: release_package/StellaSoraModLauncher-${{ github.ref_name }}.zip
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
