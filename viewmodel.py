@@ -1,7 +1,7 @@
 from PySide6.QtCore import QObject, QTimer, Signal, QThread, Slot
 from pathlib import Path
 from typing import TypedDict
-from core import Config, StellaSoraModLoader, StellaSoraGame, get_exe_path
+from core import Config, StellaSoraModLoader, StellaSoraGame, get_exe_path, ModStatusEntry
 
 
 class ModData(TypedDict):
@@ -23,7 +23,6 @@ class GameLauncherWorker(QThread):
         game_exe = Path(self.config.GameExePath.get() or "")
         mods_dir = Path(self.config.ModsDir.get() or "")
         mod_ext = self.config.ModExtension.get() or ".unity3d"
-        restore = self.config.RestoreOriginalFileWhenGameClosed.get()
 
         loader = StellaSoraModLoader(game_exe.parent, mods_dir, mod_ext, logger=self.log_message)
         game = StellaSoraGame(game_exe)
@@ -33,30 +32,23 @@ class GameLauncherWorker(QThread):
             self.finished_signal.emit()
             return
 
-        self.log_message("Installing mods...")
+        # Verify that enabled mods are properly applied (hash check)
         try:
-            loader.install_mod()
+            loader.verify_enabled_mods()
         except Exception as e:
-            self.log_message(f"Error installing mods: {e}")
+            self.log_message(f"Error verifying mods: {e}")
             self.finished_signal.emit()
             return
 
         self.log_message("Starting game...")
         game.start()
-
-        if restore:
-            self.log_message("Waiting for game close to restore files...")
             
         closed = game.wait_for_game_closed()
         if closed:
-            self.finished_signal.emit()
             self.log_message("Game closed detected.")
-            if restore:
-                loader.restore_all()
-                self.log_message("Original files restored.")
         else:
             self.log_message("Could not detect game process start.")
-
+        
         self.finished_signal.emit()
 
     def log_message(self, msg: str) -> None:
@@ -87,9 +79,16 @@ class MainViewModel(QObject):
         # For now, load_mods handles re-creating the loader with new paths
 
     def _create_loader(self):
+        game_exe_str = self.config.GameExePath.get() or ""
+        game_resource_dir = Path(game_exe_str).parent if game_exe_str else Path(".")
         mods_dir_str = self.config.ModsDir.get() or ""
         mod_ext = self.config.ModExtension.get() or ".unity3d"
-        return StellaSoraModLoader(Path("."), Path(mods_dir_str), mod_ext)
+        return StellaSoraModLoader(
+            game_resource_dir, 
+            Path(mods_dir_str), 
+            mod_ext,
+            logger=lambda msg: self.log_message.emit(msg)
+        )
 
     def load_mods(self):
         self.loader = self._create_loader() # Re-create in case config changed
@@ -112,6 +111,20 @@ class MainViewModel(QObject):
             })
         self.mods_list_changed.emit(mod_data)
 
+    def check_duplicate_conflict(self, mod_path: Path) -> list[ModStatusEntry]:
+        """Check if enabling this mod would conflict with other enabled mods.
+        
+        Returns list of conflicting mods (enabled mods with same filename).
+        """
+        return self.loader.check_duplicate_conflict(mod_path)
+    
+    def disable_conflicting_mod(self, conflict_path: str) -> None:
+        """Disable a conflicting mod by its relative path."""
+        full_path = self.loader.mods_dir / conflict_path
+        if full_path.exists():
+            self.loader.toggle_mod(full_path, False)
+            self.log_message.emit(f"Disabled conflicting mod: {Path(conflict_path).name}")
+    
     def toggle_mod(self, mod_path: Path, enable: bool):
         try:
             self.loader.toggle_mod(mod_path, enable)
@@ -161,13 +174,6 @@ class SettingsViewModel(QObject):
 
     def set_mod_ext(self, val: str) -> None:
         self.config.ModExtension.set(val)
-
-    def get_restore(self):
-        val = self.config.RestoreOriginalFileWhenGameClosed.get()
-        return val if val is not None else True
-
-    def set_restore(self, val: bool):
-        self.config.RestoreOriginalFileWhenGameClosed.set(val)
 
     def get_hide_console(self):
         val = self.config.HideConsoleWhenRunning.get()

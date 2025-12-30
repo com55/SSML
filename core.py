@@ -13,7 +13,8 @@ import sys
 class ModStatusEntry(TypedDict):
     """Type definition for mod status entry in JSON."""
     path: str  # relative path from mods_dir
-    hash: str  # SHA256 hash of the file
+    hash: str  # SHA256 hash of the current mod file
+    applied_hash: str  # hash of mod that was applied to game (empty if not applied)
     enabled: bool
 
 def get_resource_path(path: str) -> Path:
@@ -85,7 +86,6 @@ class Config:
         self.TargetExeName = StringConfig(self, 'Settings', 'target_exe_name')
         self.ModExtension = StringConfig(self, 'Settings', 'mod_extension')
 
-        self.RestoreOriginalFileWhenGameClosed = BoolConfig(self, 'Settings', 'restore_original_file_when_game_closed')
         self.HideConsoleWhenRunning = BoolConfig(self, 'Settings', 'hide_console_when_running')
 
     def reload(self) -> None:
@@ -144,8 +144,8 @@ class ModsStatusManager:
         pattern = f"*{self.mod_extension}"
         current_files = list(self.mods_dir.rglob(pattern))
         
-        # Filter out backup files
-        current_files = [f for f in current_files if ".backup." not in f.name]
+        # Filter out backup files (hidden files starting with dot)
+        current_files = [f for f in current_files if not f.name.startswith(".")]
         
         # Build a dict of current entries by path for quick lookup
         existing_entries: dict[str, ModStatusEntry] = {
@@ -175,27 +175,38 @@ class ModsStatusManager:
                 entry = existing_entries[rel_path]
                 # Check if file content changed
                 if entry["hash"] != current_hash:
-                    # File changed - update hash and reset to enabled
+                    # File changed - update hash (keep enabled status, applied_hash stays for comparison)
                     entry["hash"] = current_hash
-                    entry["enabled"] = True
+                # Ensure applied_hash field exists (migration from old format)
+                if "applied_hash" not in entry:
+                    entry["applied_hash"] = ""
             else:
-                # New file - add with enabled=True
+                # New file - add with enabled=False (default disabled)
                 new_entry: ModStatusEntry = {
                     "path": rel_path,
                     "hash": current_hash,
-                    "enabled": True
+                    "applied_hash": "",
+                    "enabled": False
                 }
                 self._status_data.append(new_entry)
         
         self.save()
     
     def get_status(self, file_path: Path) -> bool:
-        """Get enabled status for a mod file. Returns True if not found."""
+        """Get enabled status for a mod file. Returns False if not found."""
         rel_path = self._get_relative_path(file_path)
         for entry in self._status_data:
             if entry["path"] == rel_path:
                 return entry["enabled"]
-        return True  # Default to enabled if not found
+        return False  # Default to disabled if not found
+    
+    def get_entry(self, file_path: Path) -> ModStatusEntry | None:
+        """Get mod entry by file path."""
+        rel_path = self._get_relative_path(file_path)
+        for entry in self._status_data:
+            if entry["path"] == rel_path:
+                return entry
+        return None
     
     def set_status(self, file_path: Path, enabled: bool) -> None:
         """Set enabled status for a mod file."""
@@ -211,10 +222,31 @@ class ModsStatusManager:
         new_entry: ModStatusEntry = {
             "path": rel_path,
             "hash": current_hash,
+            "applied_hash": "",
             "enabled": enabled
         }
         self._status_data.append(new_entry)
         self.save()
+    
+    def set_applied_hash(self, file_path: Path, applied_hash: str) -> None:
+        """Set the applied hash for a mod file (hash of mod that was copied to game)."""
+        rel_path = self._get_relative_path(file_path)
+        for entry in self._status_data:
+            if entry["path"] == rel_path:
+                entry["applied_hash"] = applied_hash
+                self.save()
+                return
+    
+    def get_enabled_mods_with_same_name(self, filename: str, exclude_path: Path | None = None) -> list[ModStatusEntry]:
+        """Get all enabled mods with the same filename."""
+        result = []
+        exclude_rel = self._get_relative_path(exclude_path) if exclude_path else None
+        for entry in self._status_data:
+            if entry["enabled"] and Path(entry["path"]).name == filename:
+                if exclude_rel and entry["path"] == exclude_rel:
+                    continue
+                result.append(entry)
+        return result
 
 
 class StellaSoraModLoader:
@@ -240,17 +272,145 @@ class StellaSoraModLoader:
 
     def get_mods_list(self) -> list[Path]:
         pattern = f"*{self.mod_extension}"
-        # Return all mod files, filter out backup files
+        # Return all mod files, filter out backup files (hidden files starting with dot)
         all_files = list(self.mods_dir.rglob(pattern))
-        return [f for f in all_files if ".backup." not in f.name]
+        return [f for f in all_files if not f.name.startswith(".")]
 
     def is_disabled(self, path: Path) -> bool:
         """Check if mod is disabled based on JSON status."""
         return not self.status_manager.get_status(path)
 
+    def check_duplicate_conflict(self, mod_path: Path) -> list[ModStatusEntry]:
+        """Check if there are other enabled mods with the same filename.
+        
+        Returns list of conflicting enabled mods (excluding the current one).
+        """
+        return self.status_manager.get_enabled_mods_with_same_name(mod_path.name, exclude_path=mod_path)
+    
     def toggle_mod(self, mod_path: Path, enable: bool) -> None:
-        """Enable or disable a mod by updating JSON status."""
+        """Enable or disable a mod with backup/restore.
+        
+        When enabling:
+        - Check hashes and apply mod to game files
+        - Backup original game files if needed
+        
+        When disabling:
+        - Restore original files from backup
+        """
+        if enable:
+            self._apply_mod(mod_path)
+        else:
+            self._unapply_mod(mod_path)
+        
         self.status_manager.set_status(mod_path, enable)
+    
+    def _get_backup_path(self, mod_file: Path, game_file: Path) -> Path:
+        """Get the backup file path for a game file."""
+        relative_path = game_file.relative_to(self.game_resource_dir).parts
+        backup_file_name = "." + game_file.name + ".backup." + ".".join(relative_path[:-1])
+        return mod_file.parent / backup_file_name
+    
+    def _apply_mod(self, mod_path: Path) -> None:
+        """Apply mod to game files with hash-based state detection."""
+        mod_hash = self.get_file_hash(mod_path)
+        entry = self.status_manager.get_entry(mod_path)
+        applied_hash = entry.get("applied_hash", "") if entry else ""
+        
+        game_files = self.find_original_files(mod_path)
+        if not game_files:
+            self.log(f"No game files found for {mod_path.name}")
+            return
+        
+        self.log(f"Applying {mod_path.relative_to(self.mods_dir).as_posix()}")
+        
+        for game_file in game_files:
+            game_hash = self.get_file_hash(game_file)
+            backup_path = self._get_backup_path(mod_path, game_file)
+            
+            # Case 1: mod_hash == game_hash - already applied
+            if mod_hash == game_hash:
+                self.log(f"  - {game_file.name} ({self._get_folder_name(game_file)}): already applied")
+                continue
+            
+            # Case 2: No backup exists - backup and apply
+            if not backup_path.exists():
+                shutil.copy2(game_file, backup_path)
+                shutil.copy2(mod_path, game_file)
+                self.log(f"  - {game_file.name} ({self._get_folder_name(game_file)}): backed up & applied")
+                continue
+            
+            # Case 3: Backup exists - check if game has old mod or was updated
+            backup_hash = self.get_file_hash(backup_path)
+            
+            if game_hash == applied_hash and applied_hash:
+                # Game has old mod - restore first then apply new mod
+                shutil.copy2(backup_path, game_file)
+                self.log(f"  - {game_file.name} ({self._get_folder_name(game_file)}): restored old file")
+                # Now backup the restored original and apply new mod
+                shutil.copy2(game_file, backup_path)
+                shutil.copy2(mod_path, game_file)
+                self.log(f"  - {game_file.name} ({self._get_folder_name(game_file)}): applied new mod")
+            else:
+                # Game was updated - re-backup and apply
+                shutil.copy2(game_file, backup_path)
+                shutil.copy2(mod_path, game_file)
+                self.log(f"  - {game_file.name} ({self._get_folder_name(game_file)}): re-backed up & applied")
+        
+        # Update applied_hash to current mod hash
+        self.status_manager.set_applied_hash(mod_path, mod_hash)
+    
+    def _unapply_mod(self, mod_path: Path) -> None:
+        """Restore original game files from backup."""
+        game_files = self.find_original_files(mod_path)
+        
+        self.log(f"Disabling {mod_path.relative_to(self.mods_dir).as_posix()}")
+        
+        for game_file in game_files:
+            backup_path = self._get_backup_path(mod_path, game_file)
+            
+            if backup_path.exists():
+                shutil.copy2(backup_path, game_file)
+                backup_path.unlink()
+                self.log(f"  - {game_file.name} ({self._get_folder_name(game_file)}): restored")
+            else:
+                self.log(f"  - {game_file.name} ({self._get_folder_name(game_file)}): no backup found")
+        
+        # Clear applied_hash
+        self.status_manager.set_applied_hash(mod_path, "")
+
+    def verify_enabled_mods(self) -> None:
+        """Verify all enabled mods are properly applied to game files.
+        
+        For each enabled mod, check if mod_hash == game_hash.
+        If not, re-apply the mod.
+        """
+        mods = self.get_mods_list()
+        enabled_mods = [m for m in mods if not self.is_disabled(m)]
+        
+        if not enabled_mods:
+            self.log("No enabled mods to verify.")
+            return
+        
+        self.log("Verifying enabled mods...")
+        
+        for mod_path in enabled_mods:
+            mod_hash = self.get_file_hash(mod_path)
+            game_files = self.find_original_files(mod_path)
+            
+            needs_reapply = False
+            for game_file in game_files:
+                if not game_file.exists():
+                    continue
+                game_hash = self.get_file_hash(game_file)
+                if mod_hash != game_hash:
+                    needs_reapply = True
+                    break
+            
+            if needs_reapply:
+                self.log(f"Re-applying {mod_path.relative_to(self.mods_dir).as_posix()}...")
+                self._apply_mod(mod_path)
+            else:
+                self.log(f"Verified: {mod_path.relative_to(self.mods_dir).as_posix()}")
 
     def install_mod(self) -> None:
         mods = self.get_mods_list()
@@ -274,8 +434,8 @@ class StellaSoraModLoader:
                 continue
 
             relative_path = original_file.relative_to(self.game_resource_dir).parts
-            # Using specific backup naming convention
-            backup_file_name = original_file.name + ".backup." + ".".join(relative_path[:-1])
+            # Using specific backup naming convention with dot prefix to hide files
+            backup_file_name = "." + original_file.name + ".backup." + ".".join(relative_path[:-1])
             backup_path = mod_file.parent / backup_file_name
             shutil.copy2(original_file, backup_path)
 
@@ -285,20 +445,23 @@ class StellaSoraModLoader:
 
     def restore_all(self) -> None:
         # Restore for all mods (even disabled ones if they left backups)
-        # Or just scan for all .backup files in mods dir?
-        # The original logic iterated over mods_list.
-        # It's safer to scan for backup files.
+        # Scan for all hidden backup files (starting with dot)
         self.log("Restoring original files...")
-        backup_files = list(self.mods_dir.rglob("*.backup.*"))
+        backup_files = list(self.mods_dir.rglob(".*.backup.*"))
         for backup in backup_files:
              self.restore_backup_file(backup)
 
     def restore_backup_file(self, backup: Path) -> None:
         # Extract original info from backup name
-        # Name format: {original_name}.backup.{path_parts_joined_by_dots}
-        # e.g. mod.unity3d.backup.Folder1.Folder2
+        # Name format: .{original_name}.backup.{path_parts_joined_by_dots}
+        # e.g. .mod.unity3d.backup.Folder1.Folder2
 
-        parts = backup.name.split(".backup.")
+        backup_name = backup.name
+        # Remove leading dot if present
+        if backup_name.startswith("."):
+            backup_name = backup_name[1:]
+
+        parts = backup_name.split(".backup.")
         if len(parts) != 2:
             return
 

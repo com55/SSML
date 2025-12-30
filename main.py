@@ -3,9 +3,10 @@ from pathlib import Path
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                                QHBoxLayout, QPushButton, QTreeWidget, QTreeWidgetItem,
                                QTextEdit, QLabel, QFileDialog, QCheckBox, QDialog,
-                               QFormLayout, QLineEdit, QSystemTrayIcon, QMenu, QHeaderView)
+                               QFormLayout, QLineEdit, QSystemTrayIcon, QMenu, QHeaderView,
+                               QMessageBox)
 from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QCloseEvent, QIcon, QAction
+from PySide6.QtGui import QCloseEvent, QIcon, QAction, QBrush, QColor, QFont
 from qt_material_icons import MaterialIcon
 
 from viewmodel import MainViewModel, SettingsViewModel, ModData
@@ -54,16 +55,12 @@ class SettingsDialog(QDialog):
 
         self.mod_ext_edit = QLineEdit(self.vm.get_mod_ext())
 
-        self.restore_chk = QCheckBox("Restore original files when game closed")
-        self.restore_chk.setChecked(self.vm.get_restore())
-
         self.hide_console_chk = QCheckBox("Minimize to Tray when running")
         self.hide_console_chk.setChecked(self.vm.get_hide_console())
 
         form.addRow("Game Executable:", game_path_layout)
         form.addRow("Mods Directory:", mods_dir_layout)
         form.addRow("Mod Extension:", self.mod_ext_edit)
-        form.addRow("", self.restore_chk)
         form.addRow("", self.hide_console_chk)
 
         layout.addLayout(form)
@@ -87,7 +84,6 @@ class SettingsDialog(QDialog):
         self.vm.set_game_path(self.game_path_edit.text())
         self.vm.set_mods_dir(self.mods_dir_edit.text())
         self.vm.set_mod_ext(self.mod_ext_edit.text())
-        self.vm.set_restore(self.restore_chk.isChecked())
         self.vm.set_hide_console(self.hide_console_chk.isChecked())
         self.accept()
 
@@ -266,11 +262,19 @@ class MainWindow(QMainWindow):
                 folder_mods[folder_name].append(mod)
         
         # Create folder items first
+        folder_text_color = QBrush(QColor("#6CB4EE"))  # Light blue for folder names
+        folder_font = QFont()
+        folder_font.setBold(True)
+        folder_icon = MaterialIcon('folder', fill=True)
+        folder_icon.set_color("#6CB4EE")
         for folder_name in sorted(folder_mods.keys()):
             folder_item = QTreeWidgetItem(self.mod_tree_widget)
             folder_item.setText(0, folder_name)
-            folder_item.setIcon(0, MaterialIcon('folder'))
+            folder_item.setIcon(0, folder_icon)
             folder_item.setData(0, Qt.ItemDataRole.UserRole, {"type": "folder", "name": folder_name})
+            # Set folder text color and bold font to distinguish from files
+            folder_item.setForeground(0, folder_text_color)
+            folder_item.setFont(0, folder_font)
             folder_items[folder_name] = folder_item
             
             # Add folder toggle button
@@ -316,7 +320,7 @@ class MainWindow(QMainWindow):
         """Create a status button for a mod file."""
         btn = QPushButton("Enabled" if enabled else "Disabled")
         btn.setObjectName("enabledButton" if enabled else "disabledButton")
-        btn.setFixedSize(70, 22)
+        btn.setFixedSize(65, 22)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.clicked.connect(lambda: self.on_toggle_clicked(mod_path, not enabled))
         return self.create_button_container(btn)
@@ -331,14 +335,38 @@ class MainWindow(QMainWindow):
         return self.create_button_container(btn)
 
     def on_toggle_clicked(self, mod_path: Path, enable: bool) -> None:
-        """Handle single mod toggle."""
+        """Handle single mod toggle with conflict detection."""
+        if enable:
+            # Check for duplicate filename conflicts
+            conflicts = self.vm.check_duplicate_conflict(mod_path)
+            if conflicts:
+                # Show confirmation dialog
+                conflict_names = [c["path"] for c in conflicts]
+                msg = QMessageBox(self)
+                msg.setIcon(QMessageBox.Icon.Question)
+                msg.setWindowTitle("Mod Conflict")
+                msg.setText(f"Another mod with the same filename is already enabled:")
+                msg.setInformativeText(f"{', '.join(conflict_names)}\n\nDisable it and enable this mod instead?")
+                msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                msg.setDefaultButton(QMessageBox.StandardButton.No)
+                
+                if msg.exec() == QMessageBox.StandardButton.Yes:
+                    # Disable conflicting mods first
+                    for conflict in conflicts:
+                        self.vm.disable_conflicting_mod(conflict["path"])
+                    # Then enable this mod
+                    self.vm.toggle_mod(mod_path, enable)
+                # If No, do nothing
+                return
+        
         self.vm.toggle_mod(mod_path, enable)
 
     def on_folder_toggle_clicked(self, folder_name: str, enable: bool, mods: list[ModData]) -> None:
         """Handle folder toggle - toggle all mods in folder."""
         for mod in mods:
             if mod["enabled"] != enable:
-                self.vm.toggle_mod(mod["path"], enable)
+                # Use on_toggle_clicked to handle conflict detection
+                self.on_toggle_clicked(mod["path"], enable)
 
     def append_log(self, msg: str) -> None:
         self.log_text.append(msg)
