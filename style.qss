@@ -38,9 +38,9 @@ QPushButton:disabled {
 
 /* --- Launch Button (Primary Action) --- */
 QPushButton#launchButton {
-    font-size: 16px;
+    font-size: 13px;
     font-weight: bold;
-    padding: 10px 20px;
+    padding: 6px 14px;
     background-color: #4CAF50;
     color: white;
     border-radius: 4px;
@@ -61,11 +61,12 @@ QPushButton#launchButton:disabled {
 
 /* --- Settings Button --- */
 QPushButton#settingsButton {
-    font-size: 16px;
+    font-size: 13px;
     font-weight: bold;
-    padding: 10px 20px;
+    padding: 6px 12px;
     background-color: #434343;
     color: white;
+    border-radius: 4px;
 }
 
 QPushButton#settingsButton:hover {
@@ -79,11 +80,12 @@ QPushButton#settingsButton:disabled {
 
 /* --- Refresh Button --- */
 QPushButton#refreshButton {
-    font-size: 16px;
+    font-size: 13px;
     font-weight: bold;
-    padding: 10px 20px;
+    padding: 6px 12px;
     background-color: #434343;
     color: white;
+    border-radius: 4px;
 }
 
 QPushButton#refreshButton:hover {
@@ -135,7 +137,130 @@ QLabel#sectionLabel {
     margin-top: 5px;
 }
 
-/* --- List Widget (Mod List) --- */
+/* --- Tree Widget (Mod List) --- */
+QTreeWidget#modTreeWidget {
+    background-color: #1e1e1e;
+    color: #ffffff;
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+    padding: 4px;
+    outline: none;
+}
+
+QTreeWidget#modTreeWidget::item {
+    padding: 3px 4px;
+    border-bottom: 1px solid #2a2a2a;
+    min-height: 24px;
+}
+
+QTreeWidget#modTreeWidget::item:hover {
+    background-color: #333333;
+}
+
+QTreeWidget#modTreeWidget::item:selected {
+    background-color: #3a3a3a;
+    color: #ffffff;
+}
+
+QTreeWidget#modTreeWidget:disabled {
+    background-color: #252525;
+    color: #555555;
+}
+
+/* Branch arrows */
+QTreeWidget#modTreeWidget::branch {
+    background-color: transparent;
+}
+
+QTreeWidget#modTreeWidget::branch:has-children:!has-siblings:closed,
+QTreeWidget#modTreeWidget::branch:closed:has-children:has-siblings {
+    border-image: none;
+    image: url(resources/arrow-right.svg);
+}
+
+QTreeWidget#modTreeWidget::branch:open:has-children:!has-siblings,
+QTreeWidget#modTreeWidget::branch:open:has-children:has-siblings {
+    border-image: none;
+    image: url(resources/arrow-down.svg);
+}
+
+/* --- Enabled Button (Green) --- */
+QPushButton#enabledButton {
+    font-size: 11px;
+    font-weight: bold;
+    padding: 2px 4px;
+    background-color: #2e7d32;
+    color: #ffffff;
+    border: none;
+    border-radius: 3px;
+}
+
+QPushButton#enabledButton:hover {
+    background-color: #388e3c;
+}
+
+QPushButton#enabledButton:pressed {
+    background-color: #1b5e20;
+}
+
+/* --- Disabled Button (Gray/Red) --- */
+QPushButton#disabledButton {
+    font-size: 11px;
+    font-weight: bold;
+    padding: 2px 4px;
+    background-color: #616161;
+    color: #bdbdbd;
+    border: none;
+    border-radius: 3px;
+}
+
+QPushButton#disabledButton:hover {
+    background-color: #757575;
+}
+
+QPushButton#disabledButton:pressed {
+    background-color: #424242;
+}
+
+/* --- Folder Enable All Button (Blue) --- */
+QPushButton#folderEnableButton {
+    font-size: 11px;
+    font-weight: bold;
+    padding: 4px 8px;
+    background-color: #1565c0;
+    color: #ffffff;
+    border: none;
+    border-radius: 4px;
+}
+
+QPushButton#folderEnableButton:hover {
+    background-color: #1976d2;
+}
+
+QPushButton#folderEnableButton:pressed {
+    background-color: #0d47a1;
+}
+
+/* --- Folder Disable All Button (Orange) --- */
+QPushButton#folderDisableButton {
+    font-size: 11px;
+    font-weight: bold;
+    padding: 4px 8px;
+    background-color: #e65100;
+    color: #ffffff;
+    border: none;
+    border-radius: 4px;
+}
+
+QPushButton#folderDisableButton:hover {
+    background-color: #ef6c00;
+}
+
+QPushButton#folderDisableButton:pressed {
+    background-color: #bf360c;
+}
+
+/* --- Legacy List Widget (kept for compatibility) --- */
 QListWidget {
     background-color: #1e1e1e;
     color: #ffffff;

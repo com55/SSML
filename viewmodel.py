@@ -9,6 +9,7 @@ class ModData(TypedDict):
     name: str
     enabled: bool
     path: Path
+    relative_path: str  # e.g. "Chitose/char_2d_14401.unity3d"
 
 class GameLauncherWorker(QThread):
     log_signal = Signal(str)
@@ -105,7 +106,8 @@ class MainViewModel(QObject):
             mod_data.append({
                 "name": mod.name,
                 "enabled": not is_disabled,
-                "path": mod
+                "path": mod,
+                "relative_path": mod.relative_to(self.loader.mods_dir).as_posix()
             })
         self.mods_list_changed.emit(mod_data)
 

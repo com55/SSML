@@ -1,10 +1,9 @@
 import sys
 from pathlib import Path
-from typing import Any
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
-                               QHBoxLayout, QPushButton, QListWidget, QListWidgetItem,
+                               QHBoxLayout, QPushButton, QTreeWidget, QTreeWidgetItem,
                                QTextEdit, QLabel, QFileDialog, QCheckBox, QDialog,
-                               QFormLayout, QLineEdit, QSystemTrayIcon, QMenu)
+                               QFormLayout, QLineEdit, QSystemTrayIcon, QMenu, QHeaderView)
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QCloseEvent, QIcon, QAction
 from qt_material_icons import MaterialIcon
@@ -127,20 +126,23 @@ class MainWindow(QMainWindow):
         
         self.launch_btn = QPushButton("Launch Game")
         self.launch_btn.setIcon(MaterialIcon('play_arrow', fill=True))
-        self.launch_btn.setIconSize(QSize(30, 30))
+        self.launch_btn.setIconSize(QSize(20, 20))
         self.launch_btn.setObjectName("launchButton")
+        self.launch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.launch_btn.clicked.connect(self.vm.launch_game)
 
         self.settings_btn = QPushButton("Settings")
         self.settings_btn.setIcon(MaterialIcon('settings'))
-        self.settings_btn.setIconSize(QSize(30, 30))
+        self.settings_btn.setIconSize(QSize(18, 18))
         self.settings_btn.setObjectName("settingsButton")
+        self.settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.settings_btn.clicked.connect(self.open_settings)
 
         self.refresh_btn = QPushButton("Refresh")
         self.refresh_btn.setIcon(MaterialIcon('refresh'))
-        self.refresh_btn.setIconSize(QSize(30, 30))
+        self.refresh_btn.setIconSize(QSize(18, 18))
         self.refresh_btn.setObjectName("refreshButton")
+        self.refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.refresh_btn.clicked.connect(self.vm.load_mods)
         
         top_layout.addWidget(self.settings_btn)
@@ -153,13 +155,23 @@ class MainWindow(QMainWindow):
         mods_label = QLabel("Mods:")
         mods_label.setObjectName("sectionLabel")
         layout.addWidget(mods_label)
-        self.mod_list_widget = QListWidget()
-        self.mod_list_widget.setObjectName("modListWidget")
-        self.mod_list_widget.itemChanged.connect(self.on_mod_item_changed)
-        layout.addWidget(self.mod_list_widget)
+        self.mod_tree_widget = QTreeWidget()
+        self.mod_tree_widget.setObjectName("modTreeWidget")
+        self.mod_tree_widget.setColumnCount(2)
+        self.mod_tree_widget.setHeaderHidden(True)
+        self.mod_tree_widget.setAutoScroll(False)  # Disable auto-scroll on mouse near edge
+        self.mod_tree_widget.setMouseTracking(False)  # Disable mouse tracking
+        self.mod_tree_widget.setIndentation(20)  # Indent for tree structure
+        self.mod_tree_widget.setSelectionMode(QTreeWidget.SelectionMode.NoSelection)  # Disable selection highlight
+        self.mod_tree_widget.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # Disable focus rectangle
+        self.mod_tree_widget.header().setStretchLastSection(False)
+        self.mod_tree_widget.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.mod_tree_widget.header().setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+        self.mod_tree_widget.header().resizeSection(1, 90)  # Fixed width for button column
+        layout.addWidget(self.mod_tree_widget)
         
         # Log
-        log_label = QLabel("Log:")
+        log_label = QLabel("Console Log:")
         log_label.setObjectName("sectionLabel")
         layout.addWidget(log_label)
         self.log_text = QTextEdit()
@@ -234,22 +246,99 @@ class MainWindow(QMainWindow):
             self.append_log("Settings saved.")
 
     def update_mod_list(self, mods_data: list[ModData]) -> None:
-        self.mod_list_widget.blockSignals(True)
-        self.mod_list_widget.clear()
-
+        self.mod_tree_widget.clear()
+        
+        # Group mods by folder
+        folder_items: dict[str, QTreeWidgetItem] = {}
+        root_mods: list[ModData] = []
+        folder_mods: dict[str, list[ModData]] = {}
+        
         for mod in mods_data:
-            item = QListWidgetItem(mod["name"])
-            item.setData(Qt.ItemDataRole.UserRole, mod["path"])
-            item.setCheckState(Qt.CheckState.Checked if mod["enabled"] else Qt.CheckState.Unchecked)
-            self.mod_list_widget.addItem(item)
+            parts = mod["relative_path"].split("/")
+            if len(parts) == 1:
+                # Root level mod
+                root_mods.append(mod)
+            else:
+                # Mod in subfolder
+                folder_name = parts[0]
+                if folder_name not in folder_mods:
+                    folder_mods[folder_name] = []
+                folder_mods[folder_name].append(mod)
+        
+        # Create folder items first
+        for folder_name in sorted(folder_mods.keys()):
+            folder_item = QTreeWidgetItem(self.mod_tree_widget)
+            folder_item.setText(0, folder_name)
+            folder_item.setIcon(0, MaterialIcon('folder'))
+            folder_item.setData(0, Qt.ItemDataRole.UserRole, {"type": "folder", "name": folder_name})
+            folder_items[folder_name] = folder_item
+            
+            # Add folder toggle button
+            mods_in_folder = folder_mods[folder_name]
+            all_enabled = all(m["enabled"] for m in mods_in_folder)
+            folder_btn = self.create_folder_button(folder_name, all_enabled, mods_in_folder)
+            self.mod_tree_widget.setItemWidget(folder_item, 1, folder_btn)
+            
+            # Add mod items under folder
+            for mod in mods_in_folder:
+                mod_item = QTreeWidgetItem(folder_item)
+                mod_item.setText(0, mod["name"])
+                mod_item.setData(0, Qt.ItemDataRole.UserRole, {"type": "file", "path": mod["path"]})
+                
+                # Add toggle button
+                btn = self.create_status_button(mod["path"], mod["enabled"])
+                self.mod_tree_widget.setItemWidget(mod_item, 1, btn)
+            
+            folder_item.setExpanded(True)
+        
+        # Create root level mod items
+        for mod in root_mods:
+            mod_item = QTreeWidgetItem(self.mod_tree_widget)
+            mod_item.setText(0, mod["name"])
+            mod_item.setData(0, Qt.ItemDataRole.UserRole, {"type": "file", "path": mod["path"]})
+            
+            # Add toggle button
+            btn = self.create_status_button(mod["path"], mod["enabled"])
+            self.mod_tree_widget.setItemWidget(mod_item, 1, btn)
 
-        self.mod_list_widget.blockSignals(False)
+    def create_button_container(self, btn: QPushButton) -> QWidget:
+        """Wrap button in a container widget aligned to the right."""
+        container = QWidget()
+        container.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(0, 0, 4, 0)  # Right padding
+        layout.setSpacing(0)
+        layout.addStretch()  # Push button to right
+        layout.addWidget(btn)
+        return container
 
-    def on_mod_item_changed(self, item: QListWidgetItem) -> None:
-        mod_path: Any = item.data(Qt.ItemDataRole.UserRole)
-        checked = item.checkState() == Qt.CheckState.Checked
-        # Delegate to ViewModel
-        self.vm.toggle_mod(mod_path, checked)
+    def create_status_button(self, mod_path: Path, enabled: bool) -> QWidget:
+        """Create a status button for a mod file."""
+        btn = QPushButton("Enabled" if enabled else "Disabled")
+        btn.setObjectName("enabledButton" if enabled else "disabledButton")
+        btn.setFixedSize(70, 22)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.clicked.connect(lambda: self.on_toggle_clicked(mod_path, not enabled))
+        return self.create_button_container(btn)
+
+    def create_folder_button(self, folder_name: str, all_enabled: bool, mods: list[ModData]) -> QWidget:
+        """Create a toggle all button for a folder."""
+        btn = QPushButton("Disable All" if all_enabled else "Enable All")
+        btn.setObjectName("folderDisableButton" if all_enabled else "folderEnableButton")
+        btn.setFixedSize(80, 24)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.clicked.connect(lambda: self.on_folder_toggle_clicked(folder_name, not all_enabled, mods))
+        return self.create_button_container(btn)
+
+    def on_toggle_clicked(self, mod_path: Path, enable: bool) -> None:
+        """Handle single mod toggle."""
+        self.vm.toggle_mod(mod_path, enable)
+
+    def on_folder_toggle_clicked(self, folder_name: str, enable: bool, mods: list[ModData]) -> None:
+        """Handle folder toggle - toggle all mods in folder."""
+        for mod in mods:
+            if mod["enabled"] != enable:
+                self.vm.toggle_mod(mod["path"], enable)
 
     def append_log(self, msg: str) -> None:
         self.log_text.append(msg)
@@ -260,7 +349,7 @@ class MainWindow(QMainWindow):
         self.launch_btn.setText("Launch Game" if not is_running else "Game is running")
         self.refresh_btn.setEnabled(not is_running)
         self.settings_btn.setEnabled(not is_running)
-        self.mod_list_widget.setEnabled(not is_running)
+        self.mod_tree_widget.setEnabled(not is_running)
 
         if is_running and self.vm.config.HideConsoleWhenRunning.get():
              self.hide()
