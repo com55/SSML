@@ -78,8 +78,8 @@ QPushButton#settingsButton:disabled {
     color: #666666;
 }
 
-/* --- Refresh Button --- */
-QPushButton#refreshButton {
+/* --- Open Folder Button --- */
+QPushButton#openFolderButton {
     font-size: 13px;
     font-weight: bold;
     padding: 6px 12px;
@@ -88,11 +88,11 @@ QPushButton#refreshButton {
     border-radius: 4px;
 }
 
-QPushButton#refreshButton:hover {
+QPushButton#openFolderButton:hover {
     background-color: #525252;
 }
 
-QPushButton#refreshButton:disabled {
+QPushButton#openFolderButton:disabled {
     background-color: #404040;
     color: #666666;
 }

@@ -1,4 +1,5 @@
 import sys
+import os
 from pathlib import Path
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                                QHBoxLayout, QPushButton, QTreeWidget, QTreeWidgetItem,
@@ -11,6 +12,60 @@ from qt_material_icons import MaterialIcon
 
 from viewmodel import MainViewModel, SettingsViewModel, ModData
 from core import get_resource_path
+from typing import Any
+
+# Type alias for nested folder structure
+# Each folder node is a dict with "_mods" key for files in that folder
+# and other keys for subfolders
+FolderNode = dict[str, Any]  # {"_mods": list[ModData], "subfolder_name": FolderNode, ...}
+
+
+def build_folder_tree(mods_data: list[ModData]) -> tuple[list[ModData], FolderNode]:
+    """Build nested folder structure from flat mod list.
+    
+    Returns:
+        Tuple of (root_mods, folder_tree) where:
+        - root_mods: list of mods at root level
+        - folder_tree: nested dict structure for subfolders
+    """
+    root_mods: list[ModData] = []
+    tree: FolderNode = {}
+    
+    for mod in mods_data:
+        parts = mod["relative_path"].split("/")
+        if len(parts) == 1:
+            # Root level mod (no subfolder)
+            root_mods.append(mod)
+        else:
+            # Mod in subfolder - navigate/create path in tree
+            current = tree
+            for folder in parts[:-1]:  # All folders except filename
+                if folder not in current:
+                    current[folder] = {"_mods": []}
+                current = current[folder]
+            # Ensure _mods key exists
+            if "_mods" not in current:
+                current["_mods"] = []
+            current["_mods"].append(mod)
+    
+    return root_mods, tree
+
+
+def collect_all_mods_from_folder(folder_node: FolderNode) -> list[ModData]:
+    """Recursively collect all mods from a folder and its subfolders."""
+    mods: list[ModData] = []
+    
+    # Add mods directly in this folder
+    if "_mods" in folder_node:
+        mods.extend(folder_node["_mods"])
+    
+    # Recursively add mods from subfolders
+    for key, value in folder_node.items():
+        if key != "_mods" and isinstance(value, dict):
+            mods.extend(collect_all_mods_from_folder(value))
+    
+    return mods
+
 
 def load_stylesheet() -> str:
     """Load the QSS stylesheet from embedded resource."""
@@ -151,15 +206,15 @@ class MainWindow(QMainWindow):
         self.settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.settings_btn.clicked.connect(self.open_settings)
 
-        self.refresh_btn = QPushButton("Refresh")
-        self.refresh_btn.setIcon(MaterialIcon('refresh'))
-        self.refresh_btn.setIconSize(QSize(18, 18))
-        self.refresh_btn.setObjectName("refreshButton")
-        self.refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.refresh_btn.clicked.connect(self.vm.load_mods)
+        self.open_folder_btn = QPushButton("Open Mods Folder")
+        self.open_folder_btn.setIcon(MaterialIcon('folder_open'))
+        self.open_folder_btn.setIconSize(QSize(18, 18))
+        self.open_folder_btn.setObjectName("openFolderButton")
+        self.open_folder_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.open_folder_btn.clicked.connect(self.open_mods_folder)
         
         top_layout.addWidget(self.settings_btn)
-        top_layout.addWidget(self.refresh_btn)
+        top_layout.addWidget(self.open_folder_btn)
         top_layout.addStretch(1)
         top_layout.addWidget(self.launch_btn)
         layout.addLayout(top_layout)
@@ -311,59 +366,41 @@ class MainWindow(QMainWindow):
             self.vm.load_mods()
             self.append_log("Settings saved.")
 
+    def open_mods_folder(self):
+        """Open the Mods folder in file explorer."""
+        mods_dir = self.vm.config.ModsDir.get()
+        if mods_dir:
+            mods_path = Path(mods_dir)
+            if mods_path.exists():
+                os.startfile(mods_path)
+            else:
+                self.append_log(f"Mods folder not found: {mods_dir}")
+        else:
+            self.append_log("Mods folder not configured.")
+
     def update_mod_list(self, mods_data: list[ModData]) -> None:
         self.mod_tree_widget.clear()
         
-        # Group mods by folder
-        folder_items: dict[str, QTreeWidgetItem] = {}
-        root_mods: list[ModData] = []
-        folder_mods: dict[str, list[ModData]] = {}
+        # Build nested folder structure
+        root_mods, folder_tree = build_folder_tree(mods_data)
         
-        for mod in mods_data:
-            parts = mod["relative_path"].split("/")
-            if len(parts) == 1:
-                # Root level mod
-                root_mods.append(mod)
-            else:
-                # Mod in subfolder
-                folder_name = parts[0]
-                if folder_name not in folder_mods:
-                    folder_mods[folder_name] = []
-                folder_mods[folder_name].append(mod)
-        
-        # Create folder items first
+        # Style settings for folders
         folder_text_color = QBrush(QColor("#6CB4EE"))  # Light blue for folder names
         folder_font = QFont()
         folder_font.setBold(True)
         folder_icon = MaterialIcon('folder', fill=True)
         folder_icon.set_color("#6CB4EE")
-        for folder_name in sorted(folder_mods.keys()):
-            folder_item = QTreeWidgetItem(self.mod_tree_widget)
-            folder_item.setText(0, folder_name)
-            folder_item.setIcon(0, folder_icon)
-            folder_item.setData(0, Qt.ItemDataRole.UserRole, {"type": "folder", "name": folder_name})
-            # Set folder text color and bold font to distinguish from files
-            folder_item.setForeground(0, folder_text_color)
-            folder_item.setFont(0, folder_font)
-            folder_items[folder_name] = folder_item
-            
-            # Add folder toggle button
-            mods_in_folder = folder_mods[folder_name]
-            all_enabled = all(m["enabled"] for m in mods_in_folder)
-            folder_btn = self.create_folder_button(folder_name, all_enabled, mods_in_folder)
-            self.mod_tree_widget.setItemWidget(folder_item, 1, folder_btn)
-            
-            # Add mod items under folder
-            for mod in mods_in_folder:
-                mod_item = QTreeWidgetItem(folder_item)
-                mod_item.setText(0, mod["name"])
-                mod_item.setData(0, Qt.ItemDataRole.UserRole, {"type": "file", "path": mod["path"]})
-                
-                # Add toggle button
-                btn = self.create_status_button(mod["path"], mod["enabled"])
-                self.mod_tree_widget.setItemWidget(mod_item, 1, btn)
-            
-            folder_item.setExpanded(True)
+        
+        # Create folder items recursively
+        for folder_name in sorted(k for k in folder_tree.keys() if k != "_mods"):
+            self._populate_folder_item(
+                self.mod_tree_widget,
+                folder_name,
+                folder_tree[folder_name],
+                folder_text_color,
+                folder_font,
+                folder_icon
+            )
         
         # Create root level mod items
         for mod in root_mods:
@@ -374,6 +411,62 @@ class MainWindow(QMainWindow):
             # Add toggle button
             btn = self.create_status_button(mod["path"], mod["enabled"])
             self.mod_tree_widget.setItemWidget(mod_item, 1, btn)
+
+    def _populate_folder_item(
+        self,
+        parent: QTreeWidget | QTreeWidgetItem,
+        folder_name: str,
+        folder_node: FolderNode,
+        folder_text_color: QBrush,
+        folder_font: QFont,
+        folder_icon: QIcon
+    ) -> None:
+        """Recursively create tree items for folders and their contents."""
+        # Create folder item
+        if isinstance(parent, QTreeWidget):
+            folder_item = QTreeWidgetItem(parent)
+        else:
+            folder_item = QTreeWidgetItem(parent)
+        
+        folder_item.setText(0, folder_name)
+        folder_item.setIcon(0, folder_icon)
+        folder_item.setData(0, Qt.ItemDataRole.UserRole, {"type": "folder", "name": folder_name})
+        folder_item.setForeground(0, folder_text_color)
+        folder_item.setFont(0, folder_font)
+        
+        # Collect all mods in this folder and subfolders for toggle button
+        all_mods_in_folder = collect_all_mods_from_folder(folder_node)
+        all_enabled = all(m["enabled"] for m in all_mods_in_folder) if all_mods_in_folder else False
+        
+        # Add folder toggle button
+        folder_btn = self.create_folder_button(folder_name, all_enabled, all_mods_in_folder)
+        self.mod_tree_widget.setItemWidget(folder_item, 1, folder_btn)
+        
+        # Recursively add subfolders first (sorted)
+        subfolder_names = sorted(k for k in folder_node.keys() if k != "_mods")
+        for subfolder_name in subfolder_names:
+            self._populate_folder_item(
+                folder_item,
+                subfolder_name,
+                folder_node[subfolder_name],
+                folder_text_color,
+                folder_font,
+                folder_icon
+            )
+        
+        # Add mod files in this folder
+        if "_mods" in folder_node:
+            for mod in folder_node["_mods"]:
+                mod_item = QTreeWidgetItem(folder_item)
+                mod_item.setText(0, mod["name"])
+                mod_item.setData(0, Qt.ItemDataRole.UserRole, {"type": "file", "path": mod["path"]})
+                
+                # Add toggle button
+                btn = self.create_status_button(mod["path"], mod["enabled"])
+                self.mod_tree_widget.setItemWidget(mod_item, 1, btn)
+        
+        # Expand folder by default
+        folder_item.setExpanded(True)
 
     def create_button_container(self, btn: QPushButton) -> QWidget:
         """Wrap button in a container widget aligned to the right."""
@@ -449,7 +542,6 @@ class MainWindow(QMainWindow):
         self.is_running = is_running
         self.launch_btn.setEnabled(not is_running)
         self.launch_btn.setText("Launch Game" if not is_running else "Game is running")
-        self.refresh_btn.setEnabled(not is_running)
         self.settings_btn.setEnabled(not is_running)
         self.mod_tree_widget.setEnabled(not is_running)
 
