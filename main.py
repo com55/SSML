@@ -299,7 +299,30 @@ class MainWindow(QMainWindow):
     def on_files_changed(self):
         """Called when files change after debounce period."""
         if not self.is_running:  # Don't refresh while game is running
+            # Update file watcher to include newly created subdirectories
+            self._update_file_watcher()
             self.vm.load_mods()
+
+    def _update_file_watcher(self):
+        """Update file watcher to include any newly created subdirectories."""
+        mods_dir = self.vm.config.ModsDir.get()
+        if not mods_dir:
+            return
+        
+        mods_path = Path(mods_dir)
+        if not mods_path.exists():
+            return
+        
+        # Get currently watched directories
+        watched_dirs = set(self.file_watcher.directories())
+        
+        # Find all subdirectories (including newly created ones)
+        for subdir in mods_path.rglob("*"):
+            if subdir.is_dir():
+                subdir_str = str(subdir)
+                if subdir_str not in watched_dirs:
+                    # New subdirectory found - add to watcher
+                    self.file_watcher.addPath(subdir_str)
 
     def setup_tray(self):
         self.tray_icon = QSystemTrayIcon(self)

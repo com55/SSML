@@ -342,6 +342,13 @@ class StellaSoraModLoader:
         When disabling:
         - Restore original files from backup
         """
+        # Ensure status entry exists before applying mod (needed for set_applied_hash)
+        if enable:
+            entry = self.status_manager.get_entry(mod_path)
+            if not entry:
+                # Create entry with enabled=False first, will be set to True later
+                self.status_manager.set_status(mod_path, False)
+        
         if enable:
             self._apply_mod(mod_path)
         else:

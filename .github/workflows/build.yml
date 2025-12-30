@@ -53,6 +53,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      version: ${{ needs.check-version.outputs.version }}
 
     steps:
       - name: Checkout Code
@@ -70,14 +72,19 @@ jobs:
 
   # Job 3: Build Windows executable
   build-windows:
+    needs: [check-version, create-tag]
     if: |
-      startsWith(github.ref, 'refs/tags/') ||
-      github.event_name == 'workflow_dispatch'
+      always() &&
+      (startsWith(github.ref, 'refs/tags/') ||
+       github.event_name == 'workflow_dispatch' ||
+       needs.create-tag.result == 'success')
     runs-on: windows-latest
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.create-tag.result == 'success' && format('v{0}', needs.create-tag.outputs.version) || github.ref }}
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v4
@@ -125,6 +132,8 @@ jobs:
         run: |
           if ("${{ github.ref }}" -match "refs/tags/v(.+)") {
             $version = $matches[1]
+          } elseif ("${{ needs.create-tag.outputs.version }}" -ne "") {
+            $version = "${{ needs.create-tag.outputs.version }}"
           } else {
             $version = (Select-String -Path pyproject.toml -Pattern '^version = "(.+)"').Matches.Groups[1].Value
           }
@@ -140,19 +149,24 @@ jobs:
           include-hidden-files: true
 
       - name: Create Zip Archive
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || needs.create-tag.result == 'success'
         run: |
-          $tag_name = "${{ github.ref_name }}"
+          if ("${{ github.ref }}" -match "refs/tags/(.+)") {
+            $tag_name = $matches[1]
+          } else {
+            $tag_name = "v${{ needs.create-tag.outputs.version }}"
+          }
           Compress-Archive -Path release_package/StellaSoraModLauncher -DestinationPath release_package/StellaSoraModLauncher-$tag_name.zip
         shell: powershell
 
-      - name: Upload Release Asset (Tag Only)
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Upload Release Asset
+        if: startsWith(github.ref, 'refs/tags/') || needs.create-tag.result == 'success'
         uses: softprops/action-gh-release@v2
         with:
-          files: release_package/StellaSoraModLauncher-${{ github.ref_name }}.zip
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v{0}', needs.create-tag.outputs.version) }}
+          files: release_package/StellaSoraModLauncher-*.zip
           generate_release_notes: true
           draft: false
-          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
+          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') || contains(needs.create-tag.outputs.version, 'alpha') || contains(needs.create-tag.outputs.version, 'beta') || contains(needs.create-tag.outputs.version, 'rc') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
