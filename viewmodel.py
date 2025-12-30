@@ -46,16 +46,16 @@ class GameLauncherWorker(QThread):
 
         if restore:
             self.log_message("Waiting for game close to restore files...")
-            closed = game.wait_for_game_closed()
-            if closed:
-                self.finished_signal.emit()
-                self.log_message("Game closed detected.")
+            
+        closed = game.wait_for_game_closed()
+        if closed:
+            self.finished_signal.emit()
+            self.log_message("Game closed detected.")
+            if restore:
                 loader.restore_all()
                 self.log_message("Original files restored.")
-            else:
-                self.log_message("Could not detect game process start.")
         else:
-            self.log_message("Restore disabled. Finished.")
+            self.log_message("Could not detect game process start.")
 
         self.finished_signal.emit()
 
@@ -97,11 +97,12 @@ class MainViewModel(QObject):
             self.log_message.emit("Mods directory invalid.")
             return
 
+        # Sync mod status with actual files
+        self.loader.sync_mods()
+
         mods = self.loader.get_mods_list()
         mod_data = []
         for mod in mods:
-            if ".backup." in mod.name:
-                continue
             is_disabled = self.loader.is_disabled(mod)
             mod_data.append({
                 "name": mod.name,
@@ -113,9 +114,9 @@ class MainViewModel(QObject):
 
     def toggle_mod(self, mod_path: Path, enable: bool):
         try:
-            new_path = self.loader.toggle_mod(mod_path, enable)
+            self.loader.toggle_mod(mod_path, enable)
             msg = "enabled" if enable else "disabled"
-            self.log_message.emit(f"Mod {msg}: {new_path.name}")
+            self.log_message.emit(f"Mod {msg}: {mod_path.name}")
             self.load_mods() # Refresh list
         except Exception as e:
             self.log_message.emit(f"Error toggling mod: {e}")
