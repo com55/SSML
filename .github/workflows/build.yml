@@ -6,7 +6,7 @@ on:
       - main
       - master
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
 
 jobs:
@@ -79,7 +79,6 @@ jobs:
        github.event_name == 'workflow_dispatch' ||
        needs.create-tag.result == 'success')
     runs-on: windows-latest
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -94,8 +93,8 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          architecture: 'x64'
+          python-version: "3.11"
+          architecture: "x64"
 
       - name: Export requirements from uv
         run: uv export --format requirements-txt --no-hashes > requirements.txt
@@ -112,6 +111,9 @@ jobs:
           enable-plugins: pyside6
           include-package: |
             psutil
+            qt_material_icons
+          include-package-data: |
+            qt_material_icons.resources
           include-data-files: |
             icon.ico=icon.ico
             style.qss=style.qss
