@@ -13,6 +13,7 @@ A modern mod launcher for Stella Sora game with advanced mod management, automat
 - **Orphan Recovery** - Automatically restores game files when enabled mods are deleted/moved
 - **Master Toggle** - Enable/Disable all mods with one click
 - **Folder-Level Controls** - Enable/Disable all mods in a folder at once
+- **Image Preview** - Preview images in mod folders with built-in image viewer (supports PNG, JPG, GIF, BMP, WebP)
 - **Backup & Restore System** - Automatic backup of original game files with organized backup structure
 - **System Tray Support** - Minimizes to system tray while game is running
 - **Game Process Monitoring** - Monitors game process and handles cleanup automatically
@@ -59,6 +60,16 @@ Mods/
 ```
 
 The tree view will display this structure with folder icons and allow you to manage mods at any level.
+
+### Image Preview
+
+Folders containing image files (PNG, JPG, GIF, BMP, WebP) will show a 📷 photo button next to the Enable/Disable All button. Click it to open the image preview dialog where you can:
+
+- View all images in the folder
+- Navigate between images with Previous/Next buttons or **← / →** arrow keys
+- Toggle fullscreen mode with the Fullscreen button or **F11** key
+- Press **Escape** to exit fullscreen
+- Images are automatically scaled to fit the window
 
 ## How It Works
 
