@@ -100,9 +100,27 @@ uv run python main.py
 
 ## Project Structure
 
-- `main.py` - Main GUI application and window management
-- `viewmodel.py` - ViewModel classes for MVVM architecture
-- `core.py` - Core mod loader logic, configuration, and game process management
-- `style.qss` - Qt stylesheet for dark theme
-- `config.ini` - Configuration file (auto-generated)
-- `ModsStatus.json` - Mod enable/disable status tracking (auto-generated)
+```
+SSML-GUI/
+├── main.py                     # Application entry point
+├── core.py                     # Core mod loader logic, configuration, game management
+├── style.qss                   # Qt stylesheet for dark theme
+│
+├── ui/                         # UI Layer
+│   ├── main_window.py          # Main application window
+│   ├── helpers.py              # UI utilities (stylesheet, folder tree, etc.)
+│   ├── dialogs/
+│   │   ├── settings_dialog.py  # Settings configuration dialog
+│   │   └── image_preview_dialog.py  # Image preview dialog
+│   └── widgets/
+│       └── mod_tree_widget.py  # Mod list tree widget
+│
+├── viewmodels/                 # ViewModel Layer (MVVM)
+│   ├── base.py                 # Shared types (ModData)
+│   ├── main_viewmodel.py       # Main window ViewModel
+│   ├── settings_viewmodel.py   # Settings dialog ViewModel
+│   └── workers.py              # Background workers (GameLauncher)
+│
+├── config.ini                  # Configuration file (auto-generated)
+└── ModsStatus.json             # Mod status tracking (auto-generated)
+```

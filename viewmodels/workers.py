@@ -60,3 +60,24 @@ class GameLauncherWorker(QThread):
 
     def log_message(self, msg: str) -> None:
         self.log_signal.emit(msg)
+
+
+class GameMonitorWorker(QThread):
+    """Worker thread that monitors an already-running game and waits for it to close."""
+    log_signal = Signal(str)
+    finished_signal = Signal()
+
+    def __init__(self, config: Config, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self.config = config
+
+    def run(self):
+        game_exe = Path(self.config.GameExePath.get() or "")
+        game = StellaSoraGame(game_exe)
+        
+        # Wait for game to close
+        while game.is_running():
+            self.msleep(1000)  # Check every second
+        
+        self.log_signal.emit("Game closed detected.")
+        self.finished_signal.emit()

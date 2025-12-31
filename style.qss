@@ -209,7 +209,7 @@ QPushButton#disabledButton {
     font-weight: bold;
     padding: 2px 4px;
     background-color: #616161;
-    color: #bdbdbd;
+    color: #ffffff;
     border: none;
     border-radius: 3px;
 }
@@ -241,6 +241,11 @@ QPushButton#folderEnableButton:pressed {
     background-color: #0d47a1;
 }
 
+QPushButton#folderEnableButton:disabled {
+    background-color: #0d3a6e;
+    color: #666666;
+}
+
 /* --- Folder Disable All Button (Gray) --- */
 QPushButton#folderDisableButton {
     font-size: 11px;
@@ -258,6 +263,11 @@ QPushButton#folderDisableButton:hover {
 
 QPushButton#folderDisableButton:pressed {
     background-color: #424242;
+}
+
+QPushButton#folderDisableButton:disabled {
+    background-color: #3d3d3d;
+    color: #666666;
 }
 
 /* --- Legacy List Widget (kept for compatibility) --- */

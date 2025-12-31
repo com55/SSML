@@ -45,6 +45,9 @@ class MainWindow(QMainWindow):
 
         # Initial load
         self.vm.load_mods()
+        
+        # Check if game is already running when starting the program
+        self.vm.check_game_running()
 
     def _setup_ui(self):
         central = QWidget()
@@ -290,6 +293,8 @@ class MainWindow(QMainWindow):
         self.launch_btn.setText("Launch Game" if not is_running else "Game is running")
         self.settings_btn.setEnabled(not is_running)
         self.mod_tree_widget.setEnabled(not is_running)
+        self.enable_all_btn.setEnabled(not is_running)
+        self.disable_all_btn.setEnabled(not is_running)
 
         if is_running and self.vm.config.HideConsoleWhenRunning.get():
             self.hide()

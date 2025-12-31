@@ -3,9 +3,9 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, QTimer, Signal, Slot
 
-from core import Config, StellaSoraModLoader, get_exe_path, ModStatusEntry
+from core import Config, StellaSoraModLoader, StellaSoraGame, get_exe_path, ModStatusEntry
 from .base import ModData
-from .workers import GameLauncherWorker
+from .workers import GameLauncherWorker, GameMonitorWorker
 
 
 class MainViewModel(QObject):
@@ -137,3 +137,20 @@ class MainViewModel(QObject):
     @Slot()
     def on_game_finished(self):
         self.game_status_changed.emit(False)
+
+    def check_game_running(self):
+        """Check if the game is already running when the program starts."""
+        game_exe_path = self.config.GameExePath.get()
+        if not game_exe_path:
+            return
+        
+        game = StellaSoraGame(Path(game_exe_path))
+        if game.is_running():
+            self.game_status_changed.emit(True)
+            self.log_message.emit("Warning: Game is already running. Mod changes may cause errors.")
+            
+            # Start monitor worker to wait for game to close
+            self.monitor_thread = GameMonitorWorker(self.config)
+            self.monitor_thread.log_signal.connect(self.log_message)
+            self.monitor_thread.finished_signal.connect(self.on_game_finished)
+            self.monitor_thread.start()

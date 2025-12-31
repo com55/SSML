@@ -111,9 +111,6 @@ jobs:
           enable-plugins: pyside6
           include-package: |
             psutil
-            qt_material_icons
-          include-package-data: |
-            qt_material_icons.resources
           include-data-files: |
             icon.ico=icon.ico
             style.qss=style.qss
