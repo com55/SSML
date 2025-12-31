@@ -1,6 +1,6 @@
-# StellaSora Mod Launcher
+# Stella Sora Mod Launcher
 
-A modern mod launcher for StellaSora game with advanced mod management, automatic backup/restore, and intelligent conflict detection.
+A modern mod launcher for Stella Sora game with advanced mod management, automatic backup/restore, and intelligent conflict detection.
 
 ## Features
 

@@ -8,7 +8,6 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                                QMessageBox)
 from PySide6.QtCore import QSize, Qt, QFileSystemWatcher, QTimer
 from PySide6.QtGui import QCloseEvent, QIcon, QAction, QBrush, QColor, QFont
-from qt_material_icons import MaterialIcon
 
 from viewmodel import MainViewModel, SettingsViewModel, ModData
 from core import get_resource_path
@@ -136,8 +135,11 @@ class SettingsDialog(QDialog):
         layout.addWidget(save_btn)
 
     def browse_game_path(self):
-        f, _ = QFileDialog.getOpenFileName(self, "Select Game Executable", "", "Executable (*.exe)")
+        f, _ = QFileDialog.getOpenFileName(self, "Select Game Executable", "", "StellaSora (StellaSora.exe)")
         if f:
+            if not f.endswith("StellaSora.exe"):
+                QMessageBox.warning(self, "Invalid File", "Selected file is not StellaSora.exe")
+                return
             self.game_path_edit.setText(f)
             
     def browse_mods_dir(self):
@@ -162,7 +164,7 @@ class SettingsDialog(QDialog):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("StellaSora Mod Launcher")
+        self.setWindowTitle("Stella Sora Mod Launcher")
         self.setMinimumSize(600, 500)
 
         self.vm = MainViewModel()
@@ -172,17 +174,17 @@ class MainWindow(QMainWindow):
         self.vm.mods_list_changed.connect(self.update_mod_list)
         self.vm.log_message.connect(self.append_log)
         self.vm.game_status_changed.connect(self.on_game_status_changed)
-
+        
+        # Check if first run
+        if not self.vm.config.GameExePath.get():
+            self.open_settings()
+            
         self.setup_ui()
         self.setup_tray()
         self.setup_file_watcher()
 
         # Initial Load
         self.vm.load_mods()
-
-        # Check if first run
-        if not self.vm.config.GameExePath.get():
-             self.open_settings()
 
     def setup_ui(self):
         central = QWidget()
@@ -193,21 +195,21 @@ class MainWindow(QMainWindow):
         top_layout = QHBoxLayout()
         
         self.launch_btn = QPushButton("Launch Game")
-        self.launch_btn.setIcon(MaterialIcon('play_arrow', fill=True))
+        self.launch_btn.setIcon(QIcon(get_resource_path("resources/play_arrow.svg").as_posix()))
         self.launch_btn.setIconSize(QSize(20, 20))
         self.launch_btn.setObjectName("launchButton")
         self.launch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.launch_btn.clicked.connect(self.vm.launch_game)
 
         self.settings_btn = QPushButton("Settings")
-        self.settings_btn.setIcon(MaterialIcon('settings'))
+        self.settings_btn.setIcon(QIcon(get_resource_path("resources/settings.svg").as_posix()))
         self.settings_btn.setIconSize(QSize(18, 18))
         self.settings_btn.setObjectName("settingsButton")
         self.settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.settings_btn.clicked.connect(self.open_settings)
 
         self.open_folder_btn = QPushButton("Open Mods Folder")
-        self.open_folder_btn.setIcon(MaterialIcon('folder_open'))
+        self.open_folder_btn.setIcon(QIcon(get_resource_path("resources/folder_open.svg").as_posix()))
         self.open_folder_btn.setIconSize(QSize(18, 18))
         self.open_folder_btn.setObjectName("openFolderButton")
         self.open_folder_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -355,7 +357,7 @@ class MainWindow(QMainWindow):
         if self.is_running:
             self.hide()
             self.tray_icon.showMessage(
-                "StellaSora Mod Loader", 
+                "Stella Sora Mod Launcher", 
                 "Game is running. Minimized to tray.", 
                 QSystemTrayIcon.MessageIcon.Information, 
                 2000
@@ -411,8 +413,7 @@ class MainWindow(QMainWindow):
         folder_text_color = QBrush(QColor("#6CB4EE"))  # Light blue for folder names
         folder_font = QFont()
         folder_font.setBold(True)
-        folder_icon = MaterialIcon('folder', fill=True)
-        folder_icon.set_color("#6CB4EE")
+        folder_icon = QIcon(get_resource_path("resources/folder.svg").as_posix())
         
         # Create folder items recursively
         for folder_name in sorted(k for k in folder_tree.keys() if k != "_mods"):
@@ -570,7 +571,7 @@ class MainWindow(QMainWindow):
 
         if is_running and self.vm.config.HideConsoleWhenRunning.get():
              self.hide()
-             self.tray_icon.showMessage("StellaSora Mod Loader", "Game is running. Minimized to tray.", QSystemTrayIcon.MessageIcon.Information, 3000)
+             self.tray_icon.showMessage("Stella Sora Mod Launcher", "Game is running. Minimized to tray.", QSystemTrayIcon.MessageIcon.Information, 3000)
         elif not is_running and self.vm.config.HideConsoleWhenRunning.get():
              self.show_window()
 

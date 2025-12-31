@@ -1,4 +1,4 @@
-name: StellaSoraModLauncher Build
+name: Stella Sora Mod Launcher Build
 
 on:
   push:
@@ -117,6 +117,8 @@ jobs:
           include-data-files: |
             icon.ico=icon.ico
             style.qss=style.qss
+          include-data-dir: |
+            resources=resources
           windows-icon-from-ico: icon.ico
           output-dir: build
 

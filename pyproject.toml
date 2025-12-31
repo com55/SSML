@@ -10,5 +10,4 @@ dependencies = [
     "pystray>=0.19.5",
     "Pillow>=10.0.0",
     "pyside6>=6.10.1",
-    "qt-material-icons>=0.4.1",
 ]
