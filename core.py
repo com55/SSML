@@ -325,7 +325,7 @@ class StellaSoraModLoader:
         """
         return self.status_manager.get_enabled_mods_with_same_name(mod_path.name, exclude_path=mod_path)
     
-    def toggle_mod(self, mod_path: Path, enable: bool) -> None:
+    def toggle_mod(self, mod_path: Path, enable: bool) -> bool:
         """Enable or disable a mod with backup/restore.
         
         When enabling:
@@ -334,6 +334,9 @@ class StellaSoraModLoader:
         
         When disabling:
         - Restore original files from backup
+        
+        Returns:
+            bool: True if operation successful (mod enabled/disabled), False if failed (e.g. checks failed).
         """
         # Ensure status entry exists before applying mod (needed for set_applied_hash)
         if enable:
@@ -342,12 +345,16 @@ class StellaSoraModLoader:
                 # Create entry with enabled=False first, will be set to True later
                 self.status_manager.set_status(mod_path, False)
         
+        success = True
         if enable:
-            self._apply_mod(mod_path)
+            success = self._apply_mod(mod_path)
         else:
             self._unapply_mod(mod_path)
         
-        self.status_manager.set_status(mod_path, enable)
+        if success:
+            self.status_manager.set_status(mod_path, enable)
+            
+        return success
     
     def _get_backup_path(self, mod_file: Path, game_file: Path) -> Path:
         """Get the backup file path in Backups directory with same subfolder structure as Mods."""
@@ -364,16 +371,20 @@ class StellaSoraModLoader:
         
         return backup_subdir / backup_file_name
     
-    def _apply_mod(self, mod_path: Path) -> None:
-        """Apply mod to game files with hash-based state detection."""
+    def _apply_mod(self, mod_path: Path) -> bool:
+        """Apply mod to game files with hash-based state detection.
+        
+        Returns:
+            bool: True if applied successfully (or already applied), False if game files not found.
+        """
         mod_hash = self.get_file_hash(mod_path)
         entry = self.status_manager.get_entry(mod_path)
         applied_hash = entry.get("applied_hash", "") if entry else ""
         
         game_files = self.find_original_files(mod_path)
         if not game_files:
-            self.log(f"No game files found for {mod_path.name}")
-            return
+            self.log(f"No game files found for `{mod_path.name}`. This file name is correct?")
+            return False
         
         self.log(f"Applying {mod_path.relative_to(self.mods_dir).as_posix()}")
         
@@ -412,6 +423,7 @@ class StellaSoraModLoader:
         
         # Update applied_hash to current mod hash
         self.status_manager.set_applied_hash(mod_path, mod_hash)
+        return True
     
     def _unapply_mod(self, mod_path: Path) -> None:
         """Restore original game files from backup."""

@@ -94,9 +94,9 @@ class MainViewModel(QObject):
     
     def toggle_mod(self, mod_path: Path, enable: bool):
         try:
-            self.loader.toggle_mod(mod_path, enable)
-            msg = "enabled" if enable else "disabled"
-            self.log_message.emit(f"Mod {msg}: {mod_path.name}")
+            if self.loader.toggle_mod(mod_path, enable):
+                msg = "enabled" if enable else "disabled"
+                self.log_message.emit(f"Mod {msg}: {mod_path.name}")
             self.load_mods()
         except Exception as e:
             self.log_message.emit(f"Error toggling mod: {e}")
@@ -109,8 +109,8 @@ class MainViewModel(QObject):
             for mod in mods:
                 is_currently_enabled = not self.loader.is_disabled(mod)
                 if is_currently_enabled != enable:
-                    self.loader.toggle_mod(mod, enable)
-                    count += 1
+                    if self.loader.toggle_mod(mod, enable):
+                        count += 1
             
             if count > 0:
                 msg = "enabled" if enable else "disabled"
