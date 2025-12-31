@@ -124,6 +124,72 @@ QPushButton#saveButton:pressed {
     background-color: #3294e4;
 }
 
+/* --- Normal Shortcut Button (Indigo) --- */
+QPushButton#normalShortcutButton {
+    background-color: #3949AB;
+    color: white;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-weight: bold;
+}
+
+QPushButton#normalShortcutButton:hover {
+    background-color: #5C6BC0;
+}
+
+QPushButton#normalShortcutButton:pressed {
+    background-color: #283593;
+}
+
+QPushButton#normalShortcutButton:disabled {
+    background-color: #404040;
+    color: #808080;
+}
+
+/* --- Quick Launch Shortcut Button (Teal) --- */
+QPushButton#quickLaunchButton {
+    background-color: #00897B;
+    color: white;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-weight: bold;
+}
+
+QPushButton#quickLaunchButton:hover {
+    background-color: #26A69A;
+}
+
+QPushButton#quickLaunchButton:pressed {
+    background-color: #00695C;
+}
+
+QPushButton#quickLaunchButton:disabled {
+    background-color: #404040;
+    color: #808080;
+}
+
+/* --- Check Updates Button (Orange) --- */
+QPushButton#checkUpdatesButton {
+    background-color: #FB8C00;
+    color: white;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-weight: bold;
+}
+
+QPushButton#checkUpdatesButton:hover {
+    background-color: #FFA726;
+}
+
+QPushButton#checkUpdatesButton:pressed {
+    background-color: #EF6C00;
+}
+
+QPushButton#checkUpdatesButton:disabled {
+    background-color: #404040;
+    color: #808080;
+}
+
 /* --- Labels --- */
 QLabel {
     color: #ffffff;

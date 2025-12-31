@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import QSize, Qt, QFileSystemWatcher, QTimer
 from PySide6.QtGui import QCloseEvent, QIcon, QAction
 
-from core import get_resource_path
+from utils import get_resource_path
 from viewmodels import MainViewModel, ModData
 
 from .helpers import get_app_icon_path

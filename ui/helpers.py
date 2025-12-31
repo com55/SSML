@@ -2,7 +2,7 @@
 from pathlib import Path
 from typing import Any
 
-from core import get_resource_path
+from utils import get_resource_path
 from viewmodels import ModData
 
 

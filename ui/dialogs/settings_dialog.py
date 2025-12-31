@@ -1,11 +1,13 @@
 """Settings dialog for application configuration."""
+from PySide6.QtGui import Qt
 from PySide6.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, 
     QPushButton, QFormLayout, QLineEdit, QCheckBox,
-    QFileDialog, QMessageBox
+    QFileDialog, QMessageBox, QLabel, QFrame
 )
 
 from viewmodels import SettingsViewModel
+from updater import get_current_version, is_running_as_exe
 
 
 class SettingsDialog(QDialog):
@@ -15,7 +17,7 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.setObjectName("settingsDialog")
         self.setWindowTitle("Settings")
-        self.resize(500, 300)
+        self.resize(500, 420)
         self.vm = SettingsViewModel()
         
         self._setup_ui()
@@ -69,12 +71,87 @@ class SettingsDialog(QDialog):
         form.addRow("", self.hide_console_chk)
 
         layout.addLayout(form)
+        
+        # Separator - Shortcuts section
+        self._add_separator(layout, "Shortcuts")
+        
+        # Quick Launch Shortcut button
+        shortcut_layout = QHBoxLayout()
+        
+        self.normal_shortcut_btn = QPushButton("Create Normal Shortcut")
+        self.normal_shortcut_btn.setObjectName("normalShortcutButton")
+        self.normal_shortcut_btn.setToolTip("Creates a standard Desktop shortcut for the application")
+        self.normal_shortcut_btn.clicked.connect(self.create_normal_shortcut)
+
+        self.shortcut_btn = QPushButton("Create Quick Launch Shortcut")
+        self.shortcut_btn.setObjectName("quickLaunchButton")
+        self.shortcut_btn.setToolTip("Creates a Desktop shortcut that launches the game directly without showing UI")
+        self.shortcut_btn.clicked.connect(self.create_quicklaunch_shortcut)
+        
+        # Disable buttons if not running as exe
+        if not is_running_as_exe():
+            self.normal_shortcut_btn.setEnabled(False)
+            self.normal_shortcut_btn.setToolTip("Shortcut can only be created from the .exe version")
+            self.shortcut_btn.setEnabled(False)
+            self.shortcut_btn.setToolTip("Quick Launch shortcut can only be created from the .exe version")
+        
+        shortcut_layout.addWidget(self.normal_shortcut_btn)
+        shortcut_layout.addWidget(self.shortcut_btn)
+        shortcut_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addLayout(shortcut_layout)
+        
+        # Separator - Updates section  
+        self._add_separator(layout, "Updates")
+        
+        # Version and check updates
+        update_layout = QHBoxLayout()
+        self.update_btn = QPushButton("Check for Updates")
+        self.update_btn.setObjectName("checkUpdatesButton")
+        self.update_btn.clicked.connect(self.check_for_updates)
+        
+        # Disable button if not running as exe
+        if not is_running_as_exe():
+            self.update_btn.setEnabled(False)
+            self.update_btn.setToolTip("Update check only works from the .exe version")
+        
+        update_layout.addWidget(self.update_btn)
+        
+        version_label = QLabel(f"Current Version: {get_current_version()}")
+        update_layout.addWidget(version_label)
+        
+        update_layout.addStretch()
+        layout.addLayout(update_layout)
+        
+        layout.addStretch()
 
         # Save button
         save_btn = QPushButton("Save")
         save_btn.setObjectName("saveButton")
         save_btn.clicked.connect(self.save_settings)
         layout.addWidget(save_btn)
+    
+    def _add_separator(self, layout: QVBoxLayout, title: str) -> None:
+        """Add a separator with title."""
+        separator_layout = QHBoxLayout()
+        
+        line1 = QFrame()
+        line1.setFrameShape(QFrame.Shape.HLine)
+        line1.setFrameShadow(QFrame.Shadow.Sunken)
+        
+        label = QLabel(title)
+        label.setStyleSheet("color: #888; font-weight: bold;")
+        
+        line2 = QFrame()
+        line2.setFrameShape(QFrame.Shape.HLine)
+        line2.setFrameShadow(QFrame.Shadow.Sunken)
+        
+        separator_layout.addWidget(line1, 1)
+        separator_layout.addWidget(label)
+        separator_layout.addWidget(line2, 1)
+        
+        layout.addSpacing(10)
+        layout.addLayout(separator_layout)
+        layout.addSpacing(5)
 
     def browse_game_path(self):
         f, _ = QFileDialog.getOpenFileName(
@@ -95,6 +172,56 @@ class SettingsDialog(QDialog):
         d = QFileDialog.getExistingDirectory(self, "Select Backups Directory")
         if d:
             self.backups_dir_edit.setText(d)
+    
+    def create_normal_shortcut(self):
+        """Create a normal Desktop shortcut."""
+        from shortcut import create_normal_shortcut
+        
+        success, message = create_normal_shortcut()
+        if success:
+            QMessageBox.information(self, "Shortcut Created", message)
+        else:
+            QMessageBox.warning(self, "Shortcut Failed", message)
+    
+    def create_quicklaunch_shortcut(self):
+        """Create a Quick Launch desktop shortcut."""
+        from shortcut import create_quicklaunch_shortcut
+        
+        success, message = create_quicklaunch_shortcut()
+        if success:
+            QMessageBox.information(self, "Shortcut Created", message)
+        else:
+            QMessageBox.warning(self, "Shortcut Failed", message)
+    
+    def check_for_updates(self):
+        """Check for updates and show dialog if available."""
+        from updater import check_for_updates
+        from .update_dialog import UpdateDialog
+        
+        self.update_btn.setEnabled(False)
+        self.update_btn.setText("Checking...")
+        
+        try:
+            update_info = check_for_updates()
+            
+            if update_info:
+                dialog = UpdateDialog(update_info, self)
+                dialog.exec()
+            else:
+                QMessageBox.information(
+                    self,
+                    "No Updates",
+                    "You are running the latest version."
+                )
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Update Check Failed",
+                f"Failed to check for updates:\n{e}"
+            )
+        finally:
+            self.update_btn.setEnabled(True)
+            self.update_btn.setText("Check for Updates")
 
     def save_settings(self):
         self.vm.set_game_path(self.game_path_edit.text())
@@ -103,3 +230,4 @@ class SettingsDialog(QDialog):
         self.vm.set_mod_ext(self.mod_ext_edit.text())
         self.vm.set_hide_console(self.hide_console_chk.isChecked())
         self.accept()
+

@@ -9,6 +9,8 @@ from typing import Callable, TypedDict
 import psutil
 import sys
 
+from utils import get_exe_path
+
 
 class ModStatusEntry(TypedDict):
     """Type definition for mod status entry in JSON."""
@@ -16,14 +18,6 @@ class ModStatusEntry(TypedDict):
     hash: str  # SHA256 hash of the current mod file
     applied_hash: str  # hash of mod that was applied to game (empty if not applied)
     enabled: bool
-
-def get_resource_path(path: str) -> Path:
-    """Get the absolute path to the resource directory."""
-    return Path(__file__).parent / path
-
-def get_exe_path(path: str = "") -> Path:
-    """Get the absolute path to the executable directory."""
-    return Path(sys.argv[0]).resolve().parent.joinpath(path)
 
 class _ConfigOptionBase:
     def __init__(self, config_parent: "Config", section: str, option: str) -> None:
@@ -73,7 +67,6 @@ class BoolConfig(_ConfigOptionBase):
 class Config:
     def __init__(self, config_file: str = 'config.ini'):
         self.config = configparser.ConfigParser()
-        # ใช้ PROGRAM_PATH สำหรับ external config file (อยู่ข้าง .exe)
         config_path = Path(config_file)
         if not config_path.is_absolute():
             self.config_file = get_exe_path(config_file)

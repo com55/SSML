@@ -3,7 +3,8 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, QTimer, Signal, Slot
 
-from core import Config, StellaSoraModLoader, StellaSoraGame, get_exe_path, ModStatusEntry
+from core import Config, StellaSoraModLoader, StellaSoraGame, ModStatusEntry
+from utils import get_exe_path
 from .base import ModData
 from .workers import GameLauncherWorker, GameMonitorWorker
 

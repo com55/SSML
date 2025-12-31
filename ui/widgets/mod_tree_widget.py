@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QBrush, QColor, QFont, QIcon
 
-from core import get_resource_path
+from utils import get_resource_path
 from viewmodels import ModData
 from ..helpers import (
     FolderNode, build_folder_tree, collect_all_mods_from_folder, folder_has_images

@@ -91,7 +91,7 @@ Folders containing image files (PNG, JPG, GIF, BMP, WebP) will show a 📷 photo
   - `pystray>=0.19.5` - System tray support (optional)
   - `Pillow>=10.0.0` - Image processing for tray icon
 
-## Running from Source
+## Running from Source using [uv](https://github.com/astral-sh/uv#installation)
 
 ```bash
 uv sync

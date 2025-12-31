@@ -102,6 +102,21 @@ jobs:
       - name: Install Dependencies
         run: pip install -r requirements.txt
 
+      - name: Get version for build
+        id: build_version
+        run: |
+          if ("${{ github.ref }}" -match "refs/tags/v(.+)") {
+            $version = $matches[1]
+          } elseif ("${{ needs.create-tag.outputs.version }}" -ne "") {
+            $version = "${{ needs.create-tag.outputs.version }}"
+          } else {
+            $version = (Select-String -Path pyproject.toml -Pattern '^version = "(.+)"').Matches.Groups[1].Value
+          }
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+          # Create VERSION file for embedding
+          $version | Out-File -FilePath VERSION -Encoding utf8 -NoNewline
+        shell: powershell
+
       - name: Build Executable with Nuitka
         uses: Nuitka/Nuitka-Action@main
         with:
@@ -114,6 +129,7 @@ jobs:
           include-data-files: |
             icon.ico=icon.ico
             style.qss=style.qss
+            VERSION=VERSION
           include-data-dir: |
             resources=resources
           windows-icon-from-ico: icon.ico
