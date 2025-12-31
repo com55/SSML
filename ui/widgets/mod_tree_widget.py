@@ -3,7 +3,8 @@ from pathlib import Path
 from typing import Callable
 
 from PySide6.QtWidgets import (
-    QTreeWidget, QTreeWidgetItem, QWidget, QHBoxLayout, QPushButton, QHeaderView
+    QTreeWidget, QTreeWidgetItem, QWidget, QHBoxLayout, QPushButton, QHeaderView,
+    QTreeWidgetItemIterator
 )
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QBrush, QColor, QFont, QIcon
@@ -47,8 +48,12 @@ class ModTreeWidget(QTreeWidget):
         self.header().resizeSection(1, 120)
 
     def populate(self, mods_data: list[ModData], mods_dir: Path) -> None:
-        """Populate the tree with mod data."""
-        self.clear()
+        """Populate the tree with mod data, reusing existing items."""
+        # Save current scroll position
+        current_scroll = self.verticalScrollBar().value()
+        
+        # Index existing items by path
+        items_map = self._get_items_map()
         
         root_mods, folder_tree = build_folder_tree(mods_data)
         
@@ -58,23 +63,59 @@ class ModTreeWidget(QTreeWidget):
         folder_font.setBold(True)
         folder_icon = QIcon(get_resource_path("resources/folder.svg").as_posix())
         
-        # Create folder items
+        # 1. Process Folders
         for folder_name in sorted(k for k in folder_tree.keys() if k != "_mods"):
             folder_path = mods_dir / folder_name
-            self._populate_folder_item(
+            self._update_or_create_folder_item(
                 self, folder_name, folder_tree[folder_name],
-                folder_text_color, folder_font, folder_icon, folder_path
+                folder_text_color, folder_font, folder_icon, folder_path,
+                items_map
             )
         
-        # Create root level items
+        # 2. Process Root Files
         for mod in root_mods:
-            mod_item = QTreeWidgetItem(self)
-            mod_item.setText(0, mod["name"])
-            mod_item.setData(0, Qt.ItemDataRole.UserRole, {"type": "file", "path": mod["path"]})
-            btn = self._create_status_button(mod["path"], mod["enabled"])
-            self.setItemWidget(mod_item, 1, btn)
+            mod_path = mod["path"]
+            if mod_path in items_map:
+                # Update existing
+                item = items_map.pop(mod_path)
+                # If parent changed, move it (unlikely but possible)
+                if item.parent() is not None:
+                     # It was in a folder, now it's root. Retaking ownership is tricky in Qt.
+                     # Easiest way: takeFromParent if we really supported move.
+                     # For now, let's assume structure is relatively static or handle simple reparent.
+                     item.parent().removeChild(item)
+                     self.addTopLevelItem(item)
+                
+                self._update_file_item(item, mod)
+            else:
+                # Create new
+                mod_item = QTreeWidgetItem(self)
+                self._update_file_item(mod_item, mod, is_new=True)
 
-    def _populate_folder_item(
+        # 3. Cleanup items that are no longer present
+        for path, item in items_map.items():
+            parent = item.parent()
+            if parent:
+                parent.removeChild(item)
+            else:
+                self.takeTopLevelItem(self.indexOfTopLevelItem(item))
+                
+        # Restore scroll position
+        self.verticalScrollBar().setValue(current_scroll)
+
+    def _get_items_map(self) -> dict[Path, QTreeWidgetItem]:
+        """Map all current items by their path."""
+        items = {}
+        iterator = QTreeWidgetItemIterator(self)
+        while iterator.value():
+            item = iterator.value()
+            data = item.data(0, Qt.ItemDataRole.UserRole)
+            if data and "path" in data:
+                items[data["path"]] = item
+            iterator += 1
+        return items
+
+    def _update_or_create_folder_item(
         self,
         parent: "QTreeWidget | QTreeWidgetItem",
         folder_name: str,
@@ -82,10 +123,30 @@ class ModTreeWidget(QTreeWidget):
         folder_text_color: QBrush,
         folder_font: QFont,
         folder_icon: QIcon,
-        folder_path: Path
+        folder_path: Path,
+        items_map: dict[Path, QTreeWidgetItem]
     ) -> None:
-        """Recursively create tree items for folders."""
-        folder_item = QTreeWidgetItem(parent)
+        """Recursively update or create folder items."""
+        # Find or create item
+        if folder_path in items_map:
+            folder_item = items_map.pop(folder_path)
+            # Handle move/reparent if necessary
+            current_parent = folder_item.parent() or self
+            if current_parent != parent:
+                if isinstance(current_parent, QTreeWidget):
+                    current_parent.takeTopLevelItem(current_parent.indexOfTopLevelItem(folder_item))
+                else:
+                    current_parent.removeChild(folder_item)
+                
+                if isinstance(parent, QTreeWidget):
+                    parent.addTopLevelItem(folder_item)
+                else:
+                    parent.addChild(folder_item)
+        else:
+            folder_item = QTreeWidgetItem(parent)
+            folder_item.setExpanded(True) # Default expand for new folders
+
+        # Update visuals
         folder_item.setText(0, folder_name)
         folder_item.setIcon(0, folder_icon)
         folder_item.setData(0, Qt.ItemDataRole.UserRole, {
@@ -94,32 +155,150 @@ class ModTreeWidget(QTreeWidget):
         folder_item.setForeground(0, folder_text_color)
         folder_item.setFont(0, folder_font)
         
+        # Calculate stats
         all_mods = collect_all_mods_from_folder(folder_node)
         all_enabled = all(m["enabled"] for m in all_mods) if all_mods else False
         has_images = folder_has_images(folder_path)
         
-        folder_btn = self._create_folder_buttons_widget(
-            folder_name, all_enabled, all_mods, folder_path, has_images
-        )
-        self.setItemWidget(folder_item, 1, folder_btn)
+        # Update/Create Widget
+        self._update_folder_widget(folder_item, folder_name, all_enabled, all_mods, folder_path, has_images)
         
-        # Subfolders
+        # Process Children (Subfolders)
         for subfolder_name in sorted(k for k in folder_node.keys() if k != "_mods"):
-            self._populate_folder_item(
+            self._update_or_create_folder_item(
                 folder_item, subfolder_name, folder_node[subfolder_name],
-                folder_text_color, folder_font, folder_icon, folder_path / subfolder_name
+                folder_text_color, folder_font, folder_icon, folder_path / subfolder_name,
+                items_map
             )
-        
-        # Files
+            
+        # Process Children (Files)
         if "_mods" in folder_node:
             for mod in folder_node["_mods"]:
-                mod_item = QTreeWidgetItem(folder_item)
-                mod_item.setText(0, mod["name"])
-                mod_item.setData(0, Qt.ItemDataRole.UserRole, {"type": "file", "path": mod["path"]})
-                btn = self._create_status_button(mod["path"], mod["enabled"])
-                self.setItemWidget(mod_item, 1, btn)
+                mod_path = mod["path"]
+                if mod_path in items_map:
+                    mod_item = items_map.pop(mod_path)
+                    # Reparent check
+                    if mod_item.parent() != folder_item:
+                        if mod_item.parent():
+                            mod_item.parent().removeChild(mod_item)
+                        else:
+                            self.takeTopLevelItem(self.indexOfTopLevelItem(mod_item))
+                        folder_item.addChild(mod_item)
+                    
+                    self._update_file_item(mod_item, mod)
+                else:
+                    mod_item = QTreeWidgetItem(folder_item)
+                    self._update_file_item(mod_item, mod, is_new=True)
+
+    def _update_file_item(self, item: QTreeWidgetItem, mod: ModData, is_new: bool = False) -> None:
+        """Update a file item's content and widget."""
+        item.setText(0, mod["name"])
+        item.setData(0, Qt.ItemDataRole.UserRole, {"type": "file", "path": mod["path"]})
         
-        folder_item.setExpanded(True)
+        # Widget
+        if is_new:
+            btn = self._create_status_button(mod["path"], mod["enabled"])
+            self.setItemWidget(item, 1, btn)
+        else:
+            container = self.itemWidget(item, 1)
+            if container:
+                self._update_status_button(container, mod["path"], mod["enabled"])
+            else:
+                # Fallback if widget is missing for some reason
+                btn = self._create_status_button(mod["path"], mod["enabled"])
+                self.setItemWidget(item, 1, btn)
+
+    def _update_status_button(self, container: QWidget, mod_path: Path, enabled: bool) -> None:
+        """Update existing status button widget."""
+        # The container has a layout with stretch and the button
+        # We need to find the button. It should be the last item or specific type.
+        # Based on _create_button_container, layout.addWidget(btn) is last.
+        
+        btn = container.findChild(QPushButton)
+        if not btn:
+            return
+
+        text = "Enabled" if enabled else "Disabled"
+        obj_name = "enabledButton" if enabled else "disabledButton"
+        
+        # Only update if changed to avoid unnecessary repaints/flickers? 
+        # Actually we should update always to ensure state correctness, 
+        # but setText shouldn't reset cursor unless layout shifts.
+        if btn.text() != text:
+            btn.setText(text)
+        
+        if btn.objectName() != obj_name:
+            btn.setObjectName(obj_name)
+            # Force style refresh might be needed if using qss by ID
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
+            
+        # Reconnect signal to capture new state? 
+        # The old lambda captured old 'enabled' state.
+        try:
+            btn.clicked.disconnect()
+        except Exception:
+            pass # No connections
+            
+        btn.clicked.connect(lambda: self.on_toggle(mod_path, not enabled))
+
+    def _update_folder_widget(
+        self, item: QTreeWidgetItem, folder_name: str, all_enabled: bool,
+        mods: list[ModData], folder_path: Path, has_images: bool
+    ) -> None:
+        """Update or create the folder widget container."""
+        container = self.itemWidget(item, 1)
+        
+        # If widget structure requirements changed (e.g. image button appeared/disappeared),
+        # it might be easier to recreate. But let's try to reuse if possible.
+        # Container structure: [Stretch, PhotoButton (opt), ToggleButton]
+        
+        needs_recreate = False
+        if not container:
+            needs_recreate = True
+        else:
+            # Check if photo button presence matches has_images
+            photo_btn = container.findChild(QPushButton, "photoButton")
+            if (has_images and not photo_btn) or (not has_images and photo_btn):
+                needs_recreate = True
+        
+        if needs_recreate:
+            new_widget = self._create_folder_buttons_widget(folder_name, all_enabled, mods, folder_path, has_images)
+            self.setItemWidget(item, 1, new_widget)
+            return
+
+        # Reuse existing
+        # Update Toggle Button
+        toggle_btn = container.findChild(QPushButton, "folderEnableButton") or \
+                     container.findChild(QPushButton, "folderDisableButton")
+                     
+        if toggle_btn:
+            text = "Disable All" if all_enabled else "Enable All"
+            obj_name = "folderDisableButton" if all_enabled else "folderEnableButton"
+            
+            if toggle_btn.text() != text:
+                toggle_btn.setText(text)
+            
+            if toggle_btn.objectName() != obj_name:
+                toggle_btn.setObjectName(obj_name)
+                toggle_btn.style().unpolish(toggle_btn)
+                toggle_btn.style().polish(toggle_btn)
+            
+            try:
+                toggle_btn.clicked.disconnect()
+            except Exception:
+                pass
+            toggle_btn.clicked.connect(lambda: self.on_folder_toggle(folder_name, not all_enabled, mods))
+            
+        # Photo button path update (unlikely to change for same folder, but for safety)
+        if has_images:
+            photo_btn = container.findChild(QPushButton, "photoButton")
+            if photo_btn:
+                 try:
+                    photo_btn.clicked.disconnect()
+                 except Exception:
+                    pass
+                 photo_btn.clicked.connect(lambda: self.on_image_preview(folder_path))
 
     def _create_button_container(self, btn: QPushButton) -> QWidget:
         """Wrap button in container aligned right."""
