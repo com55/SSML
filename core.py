@@ -84,6 +84,7 @@ class Config:
         self.ModExtension = StringConfig(self, 'Settings', 'mod_extension')
 
         self.HideConsoleWhenRunning = BoolConfig(self, 'Settings', 'hide_console_when_running')
+        self.NonPermanentMode = BoolConfig(self, 'Settings', 'non_permanent_mode')
 
     def reload(self) -> None:
         self.config.read(self.config_file, encoding='utf-8')
@@ -490,7 +491,7 @@ class StellaSoraModLoader:
                     break
             
             if needs_reapply:
-                self.log(f"Re-applying {mod_path.relative_to(self.mods_dir).as_posix()}...")
+                self.log(f"Applying {mod_path.relative_to(self.mods_dir).as_posix()}...")
                 self._apply_mod(mod_path)
             else:
                 self.log(f"Verified: {mod_path.relative_to(self.mods_dir).as_posix()}")

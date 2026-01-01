@@ -63,12 +63,21 @@ class SettingsDialog(QDialog):
         self.hide_console_chk = QCheckBox("Minimize to Tray when running")
         self.hide_console_chk.setChecked(self.vm.get_hide_console())
 
+        # Non-permanent mode checkbox
+        self.non_permanent_chk = QCheckBox("Non-permanent mode (restore when exit game)")
+        self.non_permanent_chk.setToolTip(
+            "Mods are applied only when launching game and restored when game closes.\n"
+            "Allows easy switching between modded and official launcher."
+        )
+        self.non_permanent_chk.setChecked(self.vm.get_non_permanent_mode())
+
         # Add form rows
         form.addRow("Game Executable:", game_path_layout)
         form.addRow("Mods Directory:", mods_dir_layout)
         form.addRow("Backups Directory:", backups_dir_layout)
         form.addRow("Mod Extension:", self.mod_ext_edit)
         form.addRow("", self.hide_console_chk)
+        form.addRow("", self.non_permanent_chk)
 
         layout.addLayout(form)
         
@@ -242,5 +251,6 @@ class SettingsDialog(QDialog):
         self.vm.set_backups_dir(self.backups_dir_edit.text())
         self.vm.set_mod_ext(self.mod_ext_edit.text())
         self.vm.set_hide_console(self.hide_console_chk.isChecked())
+        self.vm.set_non_permanent_mode(self.non_permanent_chk.isChecked())
         self.accept()
 

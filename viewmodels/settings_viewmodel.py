@@ -41,3 +41,10 @@ class SettingsViewModel(QObject):
 
     def set_hide_console(self, val: bool) -> None:
         self.config.HideConsoleWhenRunning.set(val)
+
+    def get_non_permanent_mode(self) -> bool:
+        val = self.config.NonPermanentMode.get()
+        return val if val is not None else False
+
+    def set_non_permanent_mode(self, val: bool) -> None:
+        self.config.NonPermanentMode.set(val)

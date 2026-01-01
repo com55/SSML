@@ -84,6 +84,17 @@ class GameLauncher:
             logger.info("Quick launch: launching game")
             game = StellaSoraGame(game_path)
             game.start()
+            
+            # If non-permanent mode, wait for game to close and restore
+            non_permanent = self.config.NonPermanentMode.get() or False
+            if non_permanent:
+                logger.info("Quick launch: waiting for game to close (non-permanent mode)")
+                closed = game.wait_for_game_closed()
+                if closed:
+                    logger.info("Quick launch: game closed, restoring original files")
+                    loader.restore_all()
+                    logger.info("Quick launch: original files restored")
+                    
         except Exception as e:
             logger.error(f"Quick launch: Failed to launch game - {e}", exc_info=True)
             return False, f"Failed to launch game: {e}"

@@ -53,6 +53,12 @@ class GameLauncherWorker(QThread):
         closed = game.wait_for_game_closed()
         if closed:
             self.log_message("Game closed detected.")
+            # Restore original files if non-permanent mode
+            non_permanent = self.config.NonPermanentMode.get() or False
+            if non_permanent:
+                self.log_message("Restoring original files...")
+                loader.restore_all()
+                self.log_message("Original files restored.")
         else:
             self.log_message("Could not detect game process start.")
         

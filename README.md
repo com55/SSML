@@ -16,6 +16,7 @@ A modern mod launcher for Stella Sora game with advanced mod management, automat
 - **Image Preview** - Preview images in mod folders with built-in image viewer (supports PNG, JPG, GIF, BMP, WebP)
 - **Backup & Restore System** - Automatic backup of original game files with organized backup structure
 - **System Tray Support** - Minimizes to system tray while game is running
+- **Non-permanent Mode** - Mods applied only during gameplay; original files restored when game closes
 - **Game Process Monitoring** - Monitors game process and handles cleanup automatically
 - **Auto-Update** - Automatically checks for updates from GitHub releases
 - **Quick Launch Mode** - Launch game directly with `--quicklaunch` flag (skips UI)
@@ -58,6 +59,7 @@ Settings can be changed via the "Settings" button in the application.
 - `Mods Directory`: Location of your mods folder (default: `Mods` folder next to executable)
 - `Backups Directory`: Location where original game files are backed up (default: `Backups` folder)
 - `Minimize to Tray`: Automatically minimize to system tray when game is running
+- `Non-permanent mode`: When enabled, mods are applied only when launching game and original files are restored when game closes — allows easy switching between modded and official launcher
 
 ## Mod Organization
 
