@@ -54,8 +54,11 @@ class MainViewModel(QObject):
             logger=lambda msg: self.log_message.emit(msg)
         )
 
-    def load_mods(self):
-        self.loader = self._create_loader()
+    def load_mods(self, force_recreate_loader: bool = False):
+        """Load mods with optional loader recreation. Use force_recreate_loader=True after config changes."""
+        if force_recreate_loader or self.loader is None:
+            self.loader = self._create_loader()
+        
         if not self.loader.mods_dir.exists():
             self.log_message.emit("Mods directory invalid.")
             return
@@ -71,7 +74,14 @@ class MainViewModel(QObject):
         
         # Cleanup empty folders in Backups directory
         self.loader.cleanup_empty_backup_folders()
+        
+        # Save any pending changes from sync
+        self.loader.status_manager.save_if_dirty()
 
+        self._refresh_mod_list()
+    
+    def _refresh_mod_list(self):
+        """Refresh the mod list UI without reloading from disk."""
         mods = self.loader.get_mods_list()
         mod_data: list[ModData] = []
         for mod in mods:
@@ -100,7 +110,9 @@ class MainViewModel(QObject):
             if self.loader.toggle_mod(mod_path, enable):
                 msg = "enabled" if enable else "disabled"
                 self.log_message.emit(f"Mod {msg}: {mod_path.name}")
-            self.load_mods()
+            # Save changes and refresh UI
+            self.loader.status_manager.save_if_dirty()
+            self._refresh_mod_list()
         except Exception as e:
             self.log_message.emit(f"Error toggling mod: {e}")
 
@@ -118,7 +130,9 @@ class MainViewModel(QObject):
             if count > 0:
                 msg = "enabled" if enable else "disabled"
                 self.log_message.emit(f"All mods {msg}: {count} mod(s)")
-                self.load_mods()
+                # Save once after all toggles
+                self.loader.status_manager.save_if_dirty()
+                self._refresh_mod_list()
             else:
                 msg = "enabled" if enable else "disabled"
                 self.log_message.emit(f"All mods already {msg}")

@@ -105,6 +105,7 @@ class ModsStatusManager:
         self.mod_extension = mod_extension
         self.status_file = get_exe_path("ModsStatus.json")
         self._status_data: list[ModStatusEntry] = []
+        self._dirty = False
         self.load()
     
     def load(self) -> None:
@@ -124,7 +125,17 @@ class ModsStatusManager:
         """Save status data to JSON file."""
         with open(self.status_file, 'w', encoding='utf-8') as f:
             json.dump(self._status_data, f, indent=2, ensure_ascii=False)
+        self._dirty = False
         logger.debug(f"Saved {len(self._status_data)} mod entries to {self.status_file}")
+    
+    def mark_dirty(self) -> None:
+        """Mark data as modified, requiring save."""
+        self._dirty = True
+    
+    def save_if_dirty(self) -> None:
+        """Save only if data has been modified."""
+        if self._dirty:
+            self.save()
     
     def _get_file_hash(self, file_path: Path) -> str:
         """Calculate SHA256 hash of a file."""
@@ -197,7 +208,7 @@ class ModsStatusManager:
                 }
                 self._status_data.append(new_entry)
         
-        self.save()
+        self.mark_dirty()
         return orphaned_mods
     
     def get_status(self, file_path: Path) -> bool:
@@ -222,7 +233,7 @@ class ModsStatusManager:
         for entry in self._status_data:
             if entry["path"] == rel_path:
                 entry["enabled"] = enabled
-                self.save()
+                self.mark_dirty()
                 return
         
         # If not found, add new entry
@@ -234,7 +245,7 @@ class ModsStatusManager:
             "enabled": enabled
         }
         self._status_data.append(new_entry)
-        self.save()
+        self.mark_dirty()
     
     def set_applied_hash(self, file_path: Path, applied_hash: str) -> None:
         """Set the applied hash for a mod file (hash of mod that was copied to game)."""
@@ -242,7 +253,7 @@ class ModsStatusManager:
         for entry in self._status_data:
             if entry["path"] == rel_path:
                 entry["applied_hash"] = applied_hash
-                self.save()
+                self.mark_dirty()
                 return
     
     def get_enabled_mods_with_same_name(self, filename: str, exclude_path: Path | None = None) -> list[ModStatusEntry]:
