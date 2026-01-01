@@ -128,7 +128,7 @@ jobs:
             psutil
           include-data-files: |
             icon.ico=icon.ico
-            style.qss=style.qss
+            styles.qss=styles.qss
             VERSION=VERSION
           include-data-dir: |
             resources=resources

@@ -269,6 +269,11 @@ QPushButton#enabledButton:pressed {
     background-color: #1b5e20;
 }
 
+QPushButton#enabledButton:disabled {
+    background-color: #1a3d1c;
+    color: #666666;
+}
+
 /* --- Disabled Button (Gray) --- */
 QPushButton#disabledButton {
     font-size: 11px;
@@ -286,6 +291,11 @@ QPushButton#disabledButton:hover {
 
 QPushButton#disabledButton:pressed {
     background-color: #424242;
+}
+
+QPushButton#disabledButton:disabled {
+    background-color: #3d3d3d;
+    color: #666666;
 }
 
 /* --- Folder Enable All Button (Blue) --- */

@@ -15,7 +15,7 @@ FolderNode = dict[str, Any]  # {"_mods": list[ModData], "subfolder_name": Folder
 
 def load_stylesheet() -> str:
     """Load the QSS stylesheet from embedded resource."""
-    style_path = get_resource_path("style.qss")
+    style_path = get_resource_path("styles.qss")
     if style_path.exists():
         stylesheet = style_path.read_text(encoding="utf-8")
         

@@ -17,6 +17,11 @@ A modern mod launcher for Stella Sora game with advanced mod management, automat
 - **Backup & Restore System** - Automatic backup of original game files with organized backup structure
 - **System Tray Support** - Minimizes to system tray while game is running
 - **Game Process Monitoring** - Monitors game process and handles cleanup automatically
+- **Auto-Update** - Automatically checks for updates from GitHub releases
+- **Quick Launch Mode** - Launch game directly with `--quicklaunch` flag (skips UI)
+- **Desktop Shortcuts** - Create normal or quick launch shortcuts from Settings
+- **Single Instance Lock** - Prevents multiple instances from running
+- **Comprehensive Logging** - Logs to `LatestLog.txt` for debugging
 
 ## Usage
 
@@ -34,6 +39,16 @@ A modern mod launcher for Stella Sora game with advanced mod management, automat
    - Apply enabled mods to the game directory
    - Launch the game
    - Monitor game process until it closes
+
+### Quick Launch Mode
+
+Run from command line with `--quicklaunch` flag to skip the UI and launch the game directly:
+
+```bash
+StellaSoraModLauncher.exe --quicklaunch
+```
+
+You can also create a Quick Launch shortcut from Settings > "Create Quick Launch Shortcut".
 
 ## Configuration
 
@@ -79,6 +94,7 @@ Folders containing image files (PNG, JPG, GIF, BMP, WebP) will show a 📷 photo
 4. **Conflict Detection**: When enabling a mod, the system checks for other enabled mods with the same filename
 5. **Verification**: Before launching, the system verifies that all enabled mods are properly applied
 6. **Orphan Recovery**: If an enabled mod is deleted, the system automatically restores the original game file
+7. **Deferred Save**: Status changes are batched and saved once per action for optimal I/O performance
 
 ## Requirements
 
@@ -87,9 +103,8 @@ Folders containing image files (PNG, JPG, GIF, BMP, WebP) will show a 📷 photo
 - Dependencies:
   - `psutil>=7.1.3` - Process monitoring
   - `PySide6>=6.10.1` - GUI framework
-  - `qt-material-icons>=0.4.1` - Material design icons
-  - `pystray>=0.19.5` - System tray support (optional)
-  - `Pillow>=10.0.0` - Image processing for tray icon
+  - `requests>=2.32.3` - HTTP client for auto-update
+  - `packaging>=24.2` - Version comparison
 
 ## Running from Source using [uv](https://github.com/astral-sh/uv#installation)
 
@@ -98,20 +113,27 @@ uv sync
 uv run python main.py
 ```
 
-## Project Structure
+<details>
+<summary><h2>Project Structure</h2></summary>
 
 ```
 SSML-GUI/
-├── main.py                     # Application entry point
+├── main.py                     # Application entry point with logging setup
 ├── core.py                     # Core mod loader logic, configuration, game management
-├── style.qss                   # Qt stylesheet for dark theme
+├── launcher.py                 # Quick launch functionality
+├── updater.py                  # Auto-update from GitHub releases
+├── instance_lock.py            # Single instance lock
+├── shortcut.py                 # Desktop shortcut creation
+├── utils.py                    # Utility functions
+├── styles.qss                   # Qt stylesheet for dark theme
 │
 ├── ui/                         # UI Layer
 │   ├── main_window.py          # Main application window
 │   ├── helpers.py              # UI utilities (stylesheet, folder tree, etc.)
 │   ├── dialogs/
 │   │   ├── settings_dialog.py  # Settings configuration dialog
-│   │   └── image_preview_dialog.py  # Image preview dialog
+│   │   ├── image_preview_dialog.py  # Image preview dialog
+│   │   └── update_dialog.py    # Update available dialog
 │   └── widgets/
 │       └── mod_tree_widget.py  # Mod list tree widget
 │
@@ -119,8 +141,22 @@ SSML-GUI/
 │   ├── base.py                 # Shared types (ModData)
 │   ├── main_viewmodel.py       # Main window ViewModel
 │   ├── settings_viewmodel.py   # Settings dialog ViewModel
-│   └── workers.py              # Background workers (GameLauncher)
+│   └── workers.py              # Background workers (GameLauncher, GameMonitor)
+│
+├── resources/                  # Icons and assets
 │
 ├── config.ini                  # Configuration file (auto-generated)
-└── ModsStatus.json             # Mod status tracking (auto-generated)
+├── ModsStatus.json             # Mod status tracking (auto-generated)
+└── LatestLog.txt               # Application log (auto-generated)
 ```
+
+</details>
+
+## Contributing
+
+- Found a bug or have a suggestion? Please [open an issue](https://github.com/com55/SSML/issues)
+- Pull requests are welcome!
+
+## License
+
+This project is licensed under the [GPL v3.0](LICENSE) License.
