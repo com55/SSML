@@ -164,8 +164,9 @@ class UpdateDialog(QDialog):
                 )
                 # Close the application to allow update
                 self.accept()
-                import sys
-                sys.exit(0)
+                from PySide6.QtWidgets import QApplication
+                # Use quit() to allow proper cleanup (mutex release)
+                QApplication.quit()
             else:
                 QMessageBox.warning(
                     self,

@@ -117,6 +117,8 @@ def main():
         parser = argparse.ArgumentParser(description="Stella Sora Mod Launcher")
         parser.add_argument('--quicklaunch', action='store_true', 
                             help='Launch game directly without showing UI')
+        parser.add_argument('--after-update', action='store_true',
+                            help='Skip update check (used after auto-update)')
         args = parser.parse_args()
         
         # Single instance check
@@ -153,13 +155,15 @@ def main():
             app.setStyleSheet(stylesheet)
             logging.info("Loaded custom stylesheet")
         
-        # Check for updates (only when running as exe)
-        if is_running_as_exe():
+        # Check for updates (only when running as exe, skip after auto-update)
+        if is_running_as_exe() and not args.after_update:
             logging.info("Checking for updates...")
             try:
                 check_for_updates_dialog()
             except Exception as e:
                 logging.error(f"Update check failed: {e}", exc_info=True)
+        elif args.after_update:
+            logging.info("Skipping update check (started after auto-update)")
         
         # Show main window
         logging.info("Creating main window")

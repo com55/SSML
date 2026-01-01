@@ -255,22 +255,57 @@ def apply_update(update_folder: Path) -> bool:
     
     logger.info(f"Applying update: replacing {current_exe} with {new_exe}")
     
-    # Create update batch script
+    import os
+    current_pid = os.getpid()
+    
+    # Create update batch script with retry mechanism
     # Onefile exe has all resources embedded, so we only need to copy the exe
     batch_content = f'''@echo off
+setlocal enabledelayedexpansion
 echo Updating Stella Sora Mod Launcher...
-timeout /t 2 /nobreak > nul
 
-REM Replace exe file (all resources are embedded in onefile mode)
-copy /y "{new_exe}" "{current_exe}"
+REM Force kill the old process by PID
+taskkill /F /PID {current_pid} >nul 2>&1
 
-REM Start new version
-start "" "{current_exe}"
+REM Wait for process to fully terminate (max 10 seconds)
+set /a retries=0
+:WAIT_FOR_EXIT
+tasklist /FI "PID eq {current_pid}" 2>nul | find "{current_pid}" >nul
+if %errorlevel% equ 0 (
+    set /a retries+=1
+    if !retries! lss 20 (
+        timeout /t 1 /nobreak >nul
+        goto WAIT_FOR_EXIT
+    )
+    echo Warning: Old process still running, continuing anyway...
+)
+
+REM Copy with retry loop (max 10 retries, 1 second apart)
+set /a retries=0
+:COPY_RETRY
+copy /y "{new_exe}" "{current_exe}" >nul 2>&1
+if %errorlevel% neq 0 (
+    set /a retries+=1
+    if !retries! lss 10 (
+        echo Retry %retries%/10...
+        timeout /t 1 /nobreak >nul
+        goto COPY_RETRY
+    )
+    echo ERROR: Failed to copy update after 10 retries.
+    pause
+    goto END
+)
+
+echo Update completed successfully!
+
+REM Start new version with flag to skip update check
+start "" "{current_exe}" --after-update
 
 REM Cleanup temp files
-timeout /t 3 /nobreak > nul
-rmdir /s /q "{update_folder.parent}"
+timeout /t 3 /nobreak >nul
+rmdir /s /q "{update_folder.parent}" >nul 2>&1
 
+:END
 REM Delete this batch file
 del "%~f0"
 '''

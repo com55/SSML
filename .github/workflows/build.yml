@@ -136,6 +136,11 @@ jobs:
           output-dir: build
           windows-console-mode: attach
           onefile-tempdir-spec: "{CACHE_DIR}/SSML/${{ steps.build_version.outputs.version }}"
+          company-name: "${{ github.repository_owner }}"
+          product-name: "SSML"
+          file-version: "${{ steps.build_version.outputs.version }}.0"
+          product-version: "${{ steps.build_version.outputs.version }}"
+          file-description: "Stella Sora Mod Launcher"
 
       - name: Prepare Release Structure
         run: |
