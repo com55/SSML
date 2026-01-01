@@ -1,8 +1,11 @@
 """Game launcher module for quick launch functionality."""
+import logging
 from pathlib import Path
 
 from core import Config, StellaSoraModLoader, StellaSoraGame
 from utils import get_exe_path
+
+logger = logging.getLogger(__name__)
 
 
 class GameLauncher:
@@ -20,13 +23,17 @@ class GameLauncher:
         Returns:
             (success, error_message) - If success is False, error_message explains why
         """
+        logger.info("Quick launch: starting")
+        
         # Validate game path
         game_exe = self.config.GameExePath.get()
         if not game_exe:
+            logger.warning("Quick launch: Game path not configured")
             return False, "Game path not configured"
         
         game_path = Path(game_exe)
         if not game_path.exists():
+            logger.warning(f"Quick launch: Game not found at {game_path}")
             return False, f"Game not found: {game_path}"
         
         # Setup directories
@@ -47,8 +54,10 @@ class GameLauncher:
         
         # Sync and check for problems
         try:
+            logger.debug("Quick launch: syncing mods")
             orphaned = loader.sync_mods()
             if orphaned:
+                logger.warning(f"Quick launch: Found {len(orphaned)} orphaned mod(s)")
                 return False, f"Found {len(orphaned)} orphaned mod(s) that need attention"
             
             # Check for conflicts in enabled mods
@@ -59,19 +68,26 @@ class GameLauncher:
                 conflicts = loader.check_duplicate_conflict(mod)
                 if conflicts:
                     conflict_names = [c["path"] for c in conflicts]
+                    logger.warning(f"Quick launch: Mod conflict detected - {mod.name}")
                     return False, f"Mod conflict detected: {mod.name} conflicts with {conflict_names}"
             
             # Verify enabled mods are applied
+            logger.debug("Quick launch: verifying enabled mods")
             loader.verify_enabled_mods()
             
         except Exception as e:
+            logger.error(f"Quick launch: Error during mod verification - {e}", exc_info=True)
             return False, f"Error during mod verification: {e}"
         
         # Launch game
         try:
+            logger.info("Quick launch: launching game")
             game = StellaSoraGame(game_path)
             game.start()
         except Exception as e:
+            logger.error(f"Quick launch: Failed to launch game - {e}", exc_info=True)
             return False, f"Failed to launch game: {e}"
         
+        logger.info("Quick launch: success")
         return True, None
+

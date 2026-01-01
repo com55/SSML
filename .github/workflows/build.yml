@@ -134,6 +134,7 @@ jobs:
             resources=resources
           windows-icon-from-ico: icon.ico
           output-dir: build
+          windows-console-mode: attach
 
       - name: Prepare Release Structure
         run: |

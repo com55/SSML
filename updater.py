@@ -1,4 +1,5 @@
 """Auto-update module for checking and downloading updates from GitHub."""
+import logging
 import sys
 import subprocess
 import tempfile
@@ -10,6 +11,8 @@ import requests
 from packaging import version
 
 from utils import get_resource_path
+
+logger = logging.getLogger(__name__)
 
 
 GITHUB_REPO = "com55/SSML"
@@ -73,6 +76,7 @@ def check_for_updates() -> UpdateInfo | None:
         UpdateInfo if an update is available, None otherwise.
     """
     try:
+        logger.debug(f"Checking for updates from {GITHUB_API_URL}")
         response = requests.get(
             GITHUB_API_URL,
             headers={"Accept": "application/vnd.github.v3+json"},
@@ -106,6 +110,7 @@ def check_for_updates() -> UpdateInfo | None:
             latest_ver = version.parse(normalize_version(latest_version))
             
             if latest_ver > current_ver:
+                logger.info(f"Update available: {current} -> {latest_version}")
                 return UpdateInfo(
                     current_version=current,
                     latest_version=latest_version,
@@ -126,11 +131,11 @@ def check_for_updates() -> UpdateInfo | None:
         
         return None
         
-    except requests.RequestException:
-        # Network error, can't check for updates
+    except requests.RequestException as e:
+        logger.warning(f"Network error checking for updates: {e}")
         return None
-    except Exception:
-        # Unexpected error
+    except Exception as e:
+        logger.error(f"Unexpected error checking for updates: {e}", exc_info=True)
         return None
 
 
@@ -146,6 +151,7 @@ def download_update(url: str, progress_callback: Callable[[int, int], None] | No
         Path to extracted folder containing the new exe, or None if failed
     """
     try:
+        logger.info(f"Downloading update from {url}")
         response = requests.get(url, stream=True, timeout=120)
         response.raise_for_status()
         
@@ -189,7 +195,8 @@ def download_update(url: str, progress_callback: Callable[[int, int], None] | No
         
         return None
         
-    except Exception:
+    except Exception as e:
+        logger.error(f"Failed to download update: {e}", exc_info=True)
         return None
 
 
@@ -217,7 +224,10 @@ def apply_update(update_folder: Path) -> bool:
     new_exe = update_folder / "StellaSoraModLauncher.exe"
     
     if not new_exe.exists():
+        logger.error(f"New exe not found in update folder: {new_exe}")
         return False
+    
+    logger.info(f"Applying update: replacing {current_exe} with {new_exe}")
     
     # Create update batch script
     # Onefile exe has all resources embedded, so we only need to copy the exe

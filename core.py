@@ -1,6 +1,7 @@
 import configparser
 import hashlib
 import json
+import logging
 from pathlib import Path
 import shutil
 import time
@@ -10,6 +11,8 @@ import psutil
 import sys
 
 from utils import get_exe_path
+
+logger = logging.getLogger(__name__)
 
 
 class ModStatusEntry(TypedDict):
@@ -110,7 +113,9 @@ class ModsStatusManager:
             try:
                 with open(self.status_file, 'r', encoding='utf-8') as f:
                     self._status_data = json.load(f)
-            except (json.JSONDecodeError, IOError):
+                logger.debug(f"Loaded {len(self._status_data)} mod entries from {self.status_file}")
+            except (json.JSONDecodeError, IOError) as e:
+                logger.error(f"Failed to load mod status file: {e}")
                 self._status_data = []
         else:
             self._status_data = []
@@ -119,6 +124,7 @@ class ModsStatusManager:
         """Save status data to JSON file."""
         with open(self.status_file, 'w', encoding='utf-8') as f:
             json.dump(self._status_data, f, indent=2, ensure_ascii=False)
+        logger.debug(f"Saved {len(self._status_data)} mod entries to {self.status_file}")
     
     def _get_file_hash(self, file_path: Path) -> str:
         """Calculate SHA256 hash of a file."""
@@ -572,6 +578,7 @@ class StellaSoraGame:
         self.game_exe_path = Path(game_exe_path)
 
     def start(self) -> None:
+        logger.info(f"Starting game: {self.game_exe_path}")
         subprocess.Popen(
             f'start "" "{self.game_exe_path}"',
             shell=True,
@@ -590,7 +597,9 @@ class StellaSoraGame:
         return None
 
     def is_running(self) -> bool:
-        return self.get_process() is not None
+        running = self.get_process() is not None
+        logger.debug(f"Game running check: {running}")
+        return running
 
     def wait_for_game_closed(self) -> bool:
         proc = None

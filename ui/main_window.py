@@ -1,4 +1,5 @@
 """Main application window."""
+import logging
 import os
 import sys
 from pathlib import Path
@@ -18,12 +19,15 @@ from .helpers import get_app_icon_path
 from .dialogs import SettingsDialog, ImagePreviewDialog
 from .widgets import ModTreeWidget
 
+logger = logging.getLogger(__name__)
+
 
 class MainWindow(QMainWindow):
     """Main application window."""
     
     def __init__(self):
         super().__init__()
+        logger.debug("MainWindow initializing")
         self.setWindowTitle("Stella Sora Mod Launcher")
         self.setMinimumSize(600, 500)
 
@@ -49,6 +53,7 @@ class MainWindow(QMainWindow):
         
         # Check if game is already running when starting the program
         self.vm.check_game_running()
+        logger.debug("MainWindow initialized")
 
     def _setup_ui(self):
         central = QWidget()
