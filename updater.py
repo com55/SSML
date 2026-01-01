@@ -128,8 +128,8 @@ def check_for_updates(include_prerelease: bool = False) -> UpdateInfo | None:
         
         # Compare versions
         try:
-            current_ver = version.parse(normalize_version(current.lstrip("v")))
-            latest_ver = version.parse(normalize_version(latest_version.lstrip("v")))
+            current_ver = version.parse(normalize_version(current))
+            latest_ver = version.parse(normalize_version(latest_version))
             
             logger.debug(f"Version comparison: current='{current}' -> '{current_ver}', latest='{latest_version}' -> '{latest_ver}'")
             
