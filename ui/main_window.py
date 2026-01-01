@@ -30,6 +30,8 @@ class MainWindow(QMainWindow):
         self.vm = MainViewModel()
         self.is_running = False
         
+        self._setup_ui()
+        
         # Connect signals
         self.vm.mods_list_changed.connect(self._update_mod_list)
         self.vm.log_message.connect(self._append_log)
@@ -39,7 +41,6 @@ class MainWindow(QMainWindow):
         if not self.vm.config.GameExePath.get():
             self._open_settings()
             
-        self._setup_ui()
         self._setup_tray()
         self._setup_file_watcher()
 

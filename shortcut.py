@@ -34,7 +34,7 @@ def create_quicklaunch_shortcut() -> tuple[bool, str]:
         icon_path = get_resource_path("icon.ico")
         
         # Create shortcut
-        shortcut_path = desktop / "Stella Sora (Quick Launch).lnk"
+        shortcut_path = desktop / "SSML Quick Start.lnk"
         
         shell = win32com.client.Dispatch("WScript.Shell")
         shortcut = shell.CreateShortCut(str(shortcut_path))
@@ -79,7 +79,7 @@ def create_normal_shortcut() -> tuple[bool, str]:
         exe_path = Path(sys.argv[0]).resolve()
         icon_path = get_resource_path("icon.ico")
         
-        shortcut_path = desktop / "Stella Sora Mod Launcher.lnk"
+        shortcut_path = desktop / "SSML.lnk"
         
         shell = win32com.client.Dispatch("WScript.Shell")
         shortcut = shell.CreateShortCut(str(shortcut_path))
