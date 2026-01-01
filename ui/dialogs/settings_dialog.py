@@ -117,10 +117,22 @@ class SettingsDialog(QDialog):
         
         update_layout.addWidget(self.update_btn)
         
+        # Include Beta Releases checkbox
+        self.include_beta_chk = QCheckBox("Include Beta Releases")
+        self.include_beta_chk.setToolTip("When checked, manual update check will also look for pre-release versions (alpha, beta, rc)")
+        
+        if not is_running_as_exe():
+            self.include_beta_chk.setEnabled(False)
+            self.include_beta_chk.setToolTip("Include Beta Releases only works from the .exe version")
+        
+        update_layout.addWidget(self.include_beta_chk)
+        
+        update_layout.addStretch()
+        
         version_label = QLabel(f"Current Version: {get_current_version()}")
         update_layout.addWidget(version_label)
         
-        update_layout.addStretch()
+
         layout.addLayout(update_layout)
         
         layout.addStretch()
@@ -203,7 +215,7 @@ class SettingsDialog(QDialog):
         self.update_btn.setText("Checking...")
         
         try:
-            update_info = check_for_updates()
+            update_info = check_for_updates(include_prerelease=self.include_beta_chk.isChecked())
             
             if update_info:
                 dialog = UpdateDialog(update_info, self)

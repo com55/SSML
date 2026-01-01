@@ -437,6 +437,10 @@ QCheckBox::indicator:checked:hover {
     border-color: #5cb6f7;
 }
 
+QCheckBox::disabled {
+    color: #666666;
+}
+
 /* --- Dialog --- */
 QDialog {
     background-color: #2b2b2b;

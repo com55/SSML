@@ -16,7 +16,8 @@ logger = logging.getLogger(__name__)
 
 
 GITHUB_REPO = "com55/SSML"
-GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+GITHUB_API_LATEST = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+GITHUB_API_RELEASES = f"https://api.github.com/repos/{GITHUB_REPO}/releases"
 
 
 class UpdateInfo(NamedTuple):
@@ -68,26 +69,47 @@ def normalize_version(ver: str) -> str:
     return ver
 
 
-def check_for_updates() -> UpdateInfo | None:
+def check_for_updates(include_prerelease: bool = False) -> UpdateInfo | None:
     """
     Check GitHub for available updates.
+    
+    Args:
+        include_prerelease: If True, include prerelease versions (alpha, beta, rc).
+                           If False (default), only check stable releases.
     
     Returns:
         UpdateInfo if an update is available, None otherwise.
     """
     try:
-        logger.debug(f"Checking for updates from {GITHUB_API_URL}")
+        if include_prerelease:
+            # Fetch all releases and get the first one (latest including prereleases)
+            api_url = GITHUB_API_RELEASES
+            logger.debug(f"Checking for updates (including prereleases) from {api_url}")
+        else:
+            # Fetch only the latest stable release
+            api_url = GITHUB_API_LATEST
+            logger.debug(f"Checking for updates (stable only) from {api_url}")
+        
         response = requests.get(
-            GITHUB_API_URL,
+            api_url,
             headers={"Accept": "application/vnd.github.v3+json"},
             timeout=10
         )
         response.raise_for_status()
         
-        release_data = response.json()
+        # Handle response - list for /releases, dict for /releases/latest
+        data = response.json()
+        if include_prerelease:
+            if not data:
+                return None
+            release_data = data[0]  # First release is the latest
+        else:
+            release_data = data
+        
         latest_version = release_data.get("tag_name", "")
         release_notes = release_data.get("body", "")
         release_name = release_data.get("name", latest_version)
+        is_prerelease = release_data.get("prerelease", False)
         
         # Find the .zip asset (release is packaged as zip)
         download_url = ""
@@ -110,6 +132,10 @@ def check_for_updates() -> UpdateInfo | None:
             latest_ver = version.parse(normalize_version(latest_version))
             
             if latest_ver > current_ver:
+                # Add prerelease indicator to release name if applicable
+                if is_prerelease and not any(x in release_name.lower() for x in ["alpha", "beta", "rc"]):
+                    release_name = f"{release_name} (Pre-release)"
+                
                 logger.info(f"Update available: {current} -> {latest_version}")
                 return UpdateInfo(
                     current_version=current,
