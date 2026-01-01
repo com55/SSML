@@ -83,7 +83,7 @@ class Config:
         self.TargetExeName = StringConfig(self, 'Settings', 'target_exe_name')
         self.ModExtension = StringConfig(self, 'Settings', 'mod_extension')
 
-        self.HideConsoleWhenRunning = BoolConfig(self, 'Settings', 'hide_console_when_running')
+        self.MinimizeToTray = BoolConfig(self, 'Settings', 'minimize_to_tray')
         self.NonPermanentMode = BoolConfig(self, 'Settings', 'non_permanent_mode')
 
     def reload(self) -> None:

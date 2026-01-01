@@ -1,28 +1,22 @@
 """Stella Sora Mod Launcher - Entry Point."""
 import sys
-import os
-import locale
 import traceback
 import logging
 import argparse
 from types import TracebackType
 from typing import TYPE_CHECKING
 
-# Force English locale for consistent number formatting (prevent ๘๙% instead of 89%)
-os.environ["LC_ALL"] = "C"
-os.environ["LANG"] = "C"
-try:
-    locale.setlocale(locale.LC_ALL, "C")
-except locale.Error:
-    pass
-
 from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtCore import QLocale
 
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QWidget
 
 from instance_lock import SingleInstanceLock, find_and_focus_existing_window
 from updater import is_running_as_exe
+
+# Force English locale for consistent number formatting (prevent ๘๙% instead of 89%)
+QLocale.setDefault(QLocale(QLocale.Language.English, QLocale.Country.UnitedStates))
 
 
 def setup_logging():

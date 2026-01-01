@@ -59,9 +59,9 @@ class SettingsDialog(QDialog):
         # Mod extension
         self.mod_ext_edit = QLineEdit(self.vm.get_mod_ext())
 
-        # Hide console checkbox
-        self.hide_console_chk = QCheckBox("Minimize to Tray when running")
-        self.hide_console_chk.setChecked(self.vm.get_hide_console())
+        # Minimize to tray checkbox
+        self.minimize_to_tray_chk = QCheckBox("Minimize to Tray when running")
+        self.minimize_to_tray_chk.setChecked(self.vm.get_minimize_to_tray())
 
         # Non-permanent mode checkbox
         self.non_permanent_chk = QCheckBox("Non-permanent mode (restore when exit game)")
@@ -76,7 +76,7 @@ class SettingsDialog(QDialog):
         form.addRow("Mods Directory:", mods_dir_layout)
         form.addRow("Backups Directory:", backups_dir_layout)
         form.addRow("Mod Extension:", self.mod_ext_edit)
-        form.addRow("", self.hide_console_chk)
+        form.addRow("", self.minimize_to_tray_chk)
         form.addRow("", self.non_permanent_chk)
 
         layout.addLayout(form)
@@ -143,7 +143,7 @@ class SettingsDialog(QDialog):
         
 
         layout.addLayout(update_layout)
-        
+        layout.addSpacing(20)
         layout.addStretch()
 
         # Save button
@@ -250,7 +250,7 @@ class SettingsDialog(QDialog):
         self.vm.set_mods_dir(self.mods_dir_edit.text())
         self.vm.set_backups_dir(self.backups_dir_edit.text())
         self.vm.set_mod_ext(self.mod_ext_edit.text())
-        self.vm.set_hide_console(self.hide_console_chk.isChecked())
+        self.vm.set_minimize_to_tray(self.minimize_to_tray_chk.isChecked())
         self.vm.set_non_permanent_mode(self.non_permanent_chk.isChecked())
         self.accept()
 

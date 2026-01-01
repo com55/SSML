@@ -302,7 +302,7 @@ class MainWindow(QMainWindow):
         self.enable_all_btn.setEnabled(not is_running)
         self.disable_all_btn.setEnabled(not is_running)
 
-        if is_running and self.vm.config.HideConsoleWhenRunning.get():
+        if is_running and self.vm.config.MinimizeToTray.get():
             self.hide()
             self.tray_icon.showMessage(
                 "Stella Sora Mod Launcher", 
@@ -310,5 +310,5 @@ class MainWindow(QMainWindow):
                 QSystemTrayIcon.MessageIcon.Information, 
                 3000
             )
-        elif not is_running and self.vm.config.HideConsoleWhenRunning.get():
+        elif not is_running and self.vm.config.MinimizeToTray.get():
             self._show_window()

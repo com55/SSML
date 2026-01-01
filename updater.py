@@ -128,8 +128,8 @@ def check_for_updates(include_prerelease: bool = False) -> UpdateInfo | None:
         
         # Compare versions
         try:
-            current_ver = version.parse(normalize_version(current))
-            latest_ver = version.parse(normalize_version(latest_version))
+            current_ver = version.parse(normalize_version(current.lstrip("v")))
+            latest_ver = version.parse(normalize_version(latest_version.lstrip("v")))
             
             logger.debug(f"Version comparison: current='{current}' -> '{current_ver}', latest='{latest_version}' -> '{latest_ver}'")
             
@@ -140,8 +140,8 @@ def check_for_updates(include_prerelease: bool = False) -> UpdateInfo | None:
                 
                 logger.info(f"Update available: {current} -> {latest_version}")
                 return UpdateInfo(
-                    current_version=current,
-                    latest_version=latest_version,
+                    current_version=current.lstrip("v"),
+                    latest_version=latest_version.lstrip("v"),
                     download_url=download_url,
                     release_notes=release_notes,
                     release_name=release_name
@@ -150,8 +150,8 @@ def check_for_updates(include_prerelease: bool = False) -> UpdateInfo | None:
             # If version parsing fails, do string comparison
             if normalize_version(latest_version) != normalize_version(current):
                 return UpdateInfo(
-                    current_version=current,
-                    latest_version=latest_version,
+                    current_version=current.lstrip("v"),
+                    latest_version=latest_version.lstrip("v"),
                     download_url=download_url,
                     release_notes=release_notes,
                     release_name=release_name
@@ -315,10 +315,11 @@ del "%~f0"
     batch_file = update_folder.parent / "update.bat"
     batch_file.write_text(batch_content, encoding="utf-8")
     
-    # Run the batch script in minimized window
+    # Run the batch script completely hidden (no console window)
+    CREATE_NO_WINDOW = 0x08000000
     subprocess.Popen(
-        f'start "" /min "{batch_file}"',
-        shell=True,
+        ['cmd', '/c', str(batch_file)],
+        creationflags=CREATE_NO_WINDOW,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         stdin=subprocess.DEVNULL,

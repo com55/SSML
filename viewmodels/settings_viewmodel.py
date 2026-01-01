@@ -35,12 +35,12 @@ class SettingsViewModel(QObject):
     def set_mod_ext(self, val: str) -> None:
         self.config.ModExtension.set(val)
 
-    def get_hide_console(self) -> bool:
-        val = self.config.HideConsoleWhenRunning.get()
+    def get_minimize_to_tray(self) -> bool:
+        val = self.config.MinimizeToTray.get()
         return val if val is not None else True
 
-    def set_hide_console(self, val: bool) -> None:
-        self.config.HideConsoleWhenRunning.set(val)
+    def set_minimize_to_tray(self, val: bool) -> None:
+        self.config.MinimizeToTray.set(val)
 
     def get_non_permanent_mode(self) -> bool:
         val = self.config.NonPermanentMode.get()
