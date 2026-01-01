@@ -72,9 +72,6 @@ class MainViewModel(QObject):
             for entry in orphaned:
                 self.log_message.emit(f"Restored game file: {entry['path']} (mod removed or moved)")
         
-        # Cleanup empty folders in Backups directory
-        self.loader.cleanup_empty_backup_folders()
-        
         # Save any pending changes from sync
         self.loader.status_manager.save_if_dirty()
 

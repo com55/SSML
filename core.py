@@ -293,7 +293,12 @@ class StellaSoraModLoader:
         
         Returns list of orphaned enabled mods (enabled but file deleted/moved).
         """
-        return self.status_manager.sync_with_files()
+        orphaned_enabled_mods = self.status_manager.sync_with_files()
+        
+        # Cleanup empty folders in Backups directory
+        self.cleanup_empty_backup_folders()
+        
+        return orphaned_enabled_mods
 
     def restore_orphaned_backups(self, orphaned_entries: list[ModStatusEntry]) -> None:
         """Restore game files for mods that were deleted/moved while enabled.
