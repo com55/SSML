@@ -157,11 +157,6 @@ class UpdateDialog(QDialog):
             
             # Apply the update
             if apply_update(path):
-                QMessageBox.information(
-                    self,
-                    "Update Ready",
-                    "The update has been downloaded. The application will now restart to complete the update."
-                )
                 # Close the application to allow update
                 self.accept()
                 from PySide6.QtWidgets import QApplication

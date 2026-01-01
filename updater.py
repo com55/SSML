@@ -131,6 +131,8 @@ def check_for_updates(include_prerelease: bool = False) -> UpdateInfo | None:
             current_ver = version.parse(normalize_version(current))
             latest_ver = version.parse(normalize_version(latest_version))
             
+            logger.debug(f"Version comparison: current='{current}' -> '{current_ver}', latest='{latest_version}' -> '{latest_ver}'")
+            
             if latest_ver > current_ver:
                 # Add prerelease indicator to release name if applicable
                 if is_prerelease and not any(x in release_name.lower() for x in ["alpha", "beta", "rc"]):
@@ -298,8 +300,8 @@ if %errorlevel% neq 0 (
 
 echo Update completed successfully!
 
-REM Start new version with flag to skip update check
-start "" "{current_exe}" --after-update
+REM Start new version with flag to skip update check (use /B to hide console)
+start "" /B "{current_exe}" --after-update
 
 REM Cleanup temp files
 timeout /t 3 /nobreak >nul
