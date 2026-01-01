@@ -17,7 +17,15 @@ def load_stylesheet() -> str:
     """Load the QSS stylesheet from embedded resource."""
     style_path = get_resource_path("style.qss")
     if style_path.exists():
-        return style_path.read_text(encoding="utf-8")
+        stylesheet = style_path.read_text(encoding="utf-8")
+        
+        # Replace relative paths with absolute paths for resources
+        # This is needed because when running as Nuitka onefile, the QSS relative paths
+        # resolve against the CWD (executable dir), not the temp dir where resources are.
+        resources_path = get_resource_path("resources").as_posix()
+        stylesheet = stylesheet.replace("url(resources/", f"url({resources_path}/")
+        
+        return stylesheet
     return ""
 
 

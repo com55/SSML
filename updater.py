@@ -28,7 +28,7 @@ class UpdateInfo(NamedTuple):
 def is_running_as_exe() -> bool:
     """Check if the application is running as a Nuitka-compiled executable."""
     # Nuitka sets __compiled__ attribute, not sys.frozen
-    return "__compiled__" in dir()
+    return "__compiled__" in globals()
 
 
 def get_current_version() -> str:
