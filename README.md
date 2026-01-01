@@ -106,7 +106,7 @@ Folders containing image files (PNG, JPG, GIF, BMP, WebP) will show a 📷 photo
   - `psutil>=7.1.3` - Process monitoring
   - `PySide6>=6.10.1` - GUI framework
   - `requests>=2.32.3` - HTTP client for auto-update
-  - `packaging>=24.2` - Version comparison
+  - `pywin32>=306` - Windows API for shortcuts
 
 ## Running from Source using [uv](https://github.com/astral-sh/uv#installation)
 

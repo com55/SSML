@@ -129,11 +129,19 @@ class MainViewModel(QObject):
         try:
             mods = self.loader.get_mods_list()
             count = 0
+            non_permanent = self.config.NonPermanentMode.get() or False
+            
             for mod in mods:
                 is_currently_enabled = not self.loader.is_disabled(mod)
                 if is_currently_enabled != enable:
-                    if self.loader.toggle_mod(mod, enable):
+                    if non_permanent:
+                        # Non-permanent mode: only update JSON status, don't touch game files
+                        self.loader.status_manager.set_status(mod, enable)
                         count += 1
+                    else:
+                        # Normal mode: apply/unapply mod to game files
+                        if self.loader.toggle_mod(mod, enable):
+                            count += 1
             
             if count > 0:
                 msg = "enabled" if enable else "disabled"

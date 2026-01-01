@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 from updater import is_running_as_exe
-from utils import get_exe_path, get_resource_path
+from utils import get_resource_path
 
 
 def create_quicklaunch_shortcut() -> tuple[bool, str]:
