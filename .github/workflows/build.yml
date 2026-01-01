@@ -113,6 +113,9 @@ jobs:
             $version = (Select-String -Path pyproject.toml -Pattern '^version = "(.+)"').Matches.Groups[1].Value
           }
           echo "version=$version" >> $env:GITHUB_OUTPUT
+          # Extract numeric-only version for file-version (strip -beta, -alpha, etc.)
+          $numeric_version = $version -replace '-.*$', ''
+          echo "numeric_version=$numeric_version" >> $env:GITHUB_OUTPUT
           # Create VERSION file for embedding
           $version | Out-File -FilePath VERSION -Encoding utf8 -NoNewline
         shell: powershell
@@ -138,8 +141,8 @@ jobs:
           onefile-tempdir-spec: "{CACHE_DIR}/SSML/${{ steps.build_version.outputs.version }}"
           company-name: "${{ github.repository_owner }}"
           product-name: "SSML"
-          file-version: "${{ steps.build_version.outputs.version }}.0"
-          product-version: "${{ steps.build_version.outputs.version }}"
+          file-version: "${{ steps.build_version.outputs.numeric_version }}"
+          product-version: "${{ steps.build_version.outputs.numeric_version }}"
           file-description: "Stella Sora Mod Launcher"
 
       - name: Prepare Release Structure
