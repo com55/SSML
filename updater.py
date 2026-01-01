@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Callable, NamedTuple
 
 import requests
-from packaging import version
+
 
 from utils import get_resource_path
 
@@ -42,7 +42,7 @@ def get_current_version() -> str:
         # VERSION file is next to the executable
         version_file = get_resource_path("VERSION")
         if version_file.exists():
-            return version_file.read_text(encoding="utf-8").strip()
+            return version_file.read_text(encoding="utf-8-sig").strip()
         # Fallback to hardcoded version
         return "0.0.0"
     
@@ -50,7 +50,7 @@ def get_current_version() -> str:
     try:
         pyproject_path = get_resource_path("pyproject.toml")
         if pyproject_path.exists():
-            content = pyproject_path.read_text(encoding="utf-8")
+            content = pyproject_path.read_text(encoding="utf-8-sig")
             for line in content.splitlines():
                 if line.strip().startswith("version"):
                     # Extract version from: version = "0.1.1-beta"
@@ -125,36 +125,37 @@ def check_for_updates(include_prerelease: bool = False) -> UpdateInfo | None:
             return None
         
         current = get_current_version()
+        
+        current = current.lstrip("v")
+        latest_version = latest_version.lstrip("v")
         logger.debug(f"Current version: {current}")
         logger.debug(f"Latest version: {latest_version}")
         
-        # Compare versions
+        # Compare versions using numeric tuple extraction
         try:
-            current_ver = version.parse(normalize_version(current))
-            latest_ver = version.parse(normalize_version(latest_version))
+            import re
+            def get_version_tuple(v_str: str):
+                # Extract numeric part (e.g. 0.1.3.6 from v0.1.3.6-beta)
+                match = re.search(r'(\d+(\.\d+)*)', v_str)
+                if match:
+                    parts = match.group(0).split('.')
+                    return tuple(map(int, parts))
+                return (0,)
+
+            current_tuple = get_version_tuple(current)
+            latest_tuple = get_version_tuple(latest_version)
             
-            logger.debug(f"Version comparison: current='{current}' -> '{current_ver}', latest='{latest_version}' -> '{latest_ver}'")
+            logger.debug(f"Version comparison: current='{current}' -> {current_tuple}, latest='{latest_version}' -> {latest_tuple}")
             
-            if latest_ver > current_ver:
+            if latest_tuple > current_tuple:
                 # Add prerelease indicator to release name if applicable
                 if is_prerelease and not any(x in release_name.lower() for x in ["alpha", "beta", "rc"]):
                     release_name = f"{release_name} (Pre-release)"
                 
                 logger.info(f"Update available: {current} -> {latest_version}")
                 return UpdateInfo(
-                    current_version=current.lstrip("v"),
-                    latest_version=latest_version.lstrip("v"),
-                    download_url=download_url,
-                    release_notes=release_notes,
-                    release_name=release_name
-                )
-        except version.InvalidVersion as e:
-            logger.warning(f"Version parsing failed: {e}. Falling back to string comparison.")
-            # If version parsing fails, do string comparison
-            if normalize_version(latest_version) != normalize_version(current):
-                return UpdateInfo(
-                    current_version=current.lstrip("v"),
-                    latest_version=latest_version.lstrip("v"),
+                    current_version=current,
+                    latest_version=latest_version,
                     download_url=download_url,
                     release_notes=release_notes,
                     release_name=release_name
