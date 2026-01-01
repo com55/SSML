@@ -107,6 +107,7 @@ class SettingsDialog(QDialog):
         update_layout = QHBoxLayout()
         self.update_btn = QPushButton("Check for Updates")
         self.update_btn.setObjectName("checkUpdatesButton")
+        self.update_btn.setFixedWidth(145)
         self.update_btn.clicked.connect(self.check_for_updates)
         
         # Disable button if not running as exe

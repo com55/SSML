@@ -135,6 +135,7 @@ jobs:
           windows-icon-from-ico: icon.ico
           output-dir: build
           windows-console-mode: attach
+          onefile-tempdir-spec: "{CACHE_DIR}/SSML/${{ steps.build_version.outputs.version }}"
 
       - name: Prepare Release Structure
         run: |
