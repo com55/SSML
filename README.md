@@ -113,8 +113,10 @@ uv sync
 uv run python main.py
 ```
 
+## Project Structure
+
 <details>
-<summary><h2>Project Structure</h2></summary>
+<summary>Click to see detail</summary>
 
 ```
 SSML-GUI/
