@@ -125,6 +125,8 @@ def check_for_updates(include_prerelease: bool = False) -> UpdateInfo | None:
             return None
         
         current = get_current_version()
+        logger.debug(f"Current version: {current}")
+        logger.debug(f"Latest version: {latest_version}")
         
         # Compare versions
         try:
@@ -146,7 +148,8 @@ def check_for_updates(include_prerelease: bool = False) -> UpdateInfo | None:
                     release_notes=release_notes,
                     release_name=release_name
                 )
-        except version.InvalidVersion:
+        except version.InvalidVersion as e:
+            logger.warning(f"Version parsing failed: {e}. Falling back to string comparison.")
             # If version parsing fails, do string comparison
             if normalize_version(latest_version) != normalize_version(current):
                 return UpdateInfo(
@@ -156,6 +159,9 @@ def check_for_updates(include_prerelease: bool = False) -> UpdateInfo | None:
                     release_notes=release_notes,
                     release_name=release_name
                 )
+        except Exception as e:
+            logger.error(f"Error during version comparison: {e}", exc_info=True)
+            return None
         
         return None
         
