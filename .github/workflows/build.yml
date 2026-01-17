@@ -146,28 +146,38 @@ jobs:
           file-description: "Stella Sora Mod Launcher"
           
       - name: Sign Executable
+        if: env.CERT_DATA != '' && env.CERT_PASS != ''
         shell: pwsh
         env:
           CERT_DATA: ${{ secrets.CERT_BASE64 }}
           CERT_PASS: ${{ secrets.CERT_PASSWORD }}
-        if: env.CERT_DATA != '' && env.CERT_PASS != ''
         run: |
           $certPath = Join-Path $env:RUNNER_TEMP "cert.pfx"
           
+          $signtool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin\" -Filter signtool.exe -Recurse | 
+                      Sort-Object -Property LastWriteTime -Descending | 
+                      Select-Object -First 1 -ExpandProperty FullName
+
+          if (-not $signtool) {
+              Write-Error "Couldn't find signtool.exe on Runner's machine."
+              exit 1
+          }
+
           try {
+              Write-Host "Using Signtool at: $signtool"
               Write-Host "Decoding Certificate..."
               $certBytes = [System.Convert]::FromBase64String($env:CERT_DATA)
               [System.IO.File]::WriteAllBytes($certPath, $certBytes)
               
               Write-Host "Signing executable..."
-              signtool sign /f $certPath `
+              & $signtool sign /f $certPath `
                              /p $env:CERT_PASS `
                              /tr http://timestamp.digicert.com `
                              /td sha256 `
                              /fd sha256 `
                              /v "build/main.exe"
               
-              signtool verify /pa /v "build/main.exe"
+              & $signtool verify /pa /v "build/main.exe"
               Write-Host "Successfully signed and verified!" -ForegroundColor Green
           }
           catch {
