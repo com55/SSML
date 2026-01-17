@@ -137,8 +137,8 @@ jobs:
             resources=resources
           windows-icon-from-ico: icon.ico
           output-dir: build
-          windows-console-mode: attach
-          onefile-tempdir-spec: "{CACHE_DIR}/SSML/${{ steps.build_version.outputs.version }}"
+          windows-console-mode: disable
+          onefile-tempdir-spec: "{CACHE_DIR}/{COMPANY}/{PRODUCT}/{VERSION}"
           company-name: "${{ github.repository_owner }}"
           product-name: "SSML"
           file-version: "${{ steps.build_version.outputs.numeric_version }}"
