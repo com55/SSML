@@ -144,7 +144,43 @@ jobs:
           file-version: "${{ steps.build_version.outputs.numeric_version }}"
           product-version: "${{ steps.build_version.outputs.numeric_version }}"
           file-description: "Stella Sora Mod Launcher"
-
+          
+      - name: Sign Executable
+        shell: pwsh
+        env:
+          CERT_DATA: ${{ secrets.CERT_BASE64 }}
+          CERT_PASS: ${{ secrets.CERT_PASSWORD }}
+        if: env.CERT_DATA != '' && env.CERT_PASS != ''
+        run: |
+          $certPath = Join-Path $env:RUNNER_TEMP "cert.pfx"
+          
+          try {
+              Write-Host "Decoding Certificate..."
+              $certBytes = [System.Convert]::FromBase64String($env:CERT_DATA)
+              [System.IO.File]::WriteAllBytes($certPath, $certBytes)
+              
+              Write-Host "Signing executable..."
+              signtool sign /f $certPath `
+                             /p $env:CERT_PASS `
+                             /tr http://timestamp.digicert.com `
+                             /td sha256 `
+                             /fd sha256 `
+                             /v "build/main.exe"
+              
+              signtool verify /pa /v "build/main.exe"
+              Write-Host "Successfully signed and verified!" -ForegroundColor Green
+          }
+          catch {
+              Write-Error "Failed to sign executable: $($_.Exception.Message)"
+              exit 1
+          }
+          finally {
+              if (Test-Path $certPath) {
+                  Remove-Item $certPath -Force
+                  Write-Host "Temporary certificate removed."
+              }
+          }
+          
       - name: Prepare Release Structure
         run: |
           mkdir release_package
