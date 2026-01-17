@@ -138,7 +138,8 @@ jobs:
           windows-icon-from-ico: icon.ico
           output-dir: build
           windows-console-mode: disable
-          onefile-tempdir-spec: "{CACHE_DIR}/{COMPANY}/{PRODUCT}/{VERSION}"
+          onefile-tempdir-spec: "{TEMP}/{COMPANY}/{PRODUCT}/{VERSION}"
+          onefile-cache-mode: cached
           company-name: "${{ github.repository_owner }}"
           product-name: "SSML"
           file-version: "${{ steps.build_version.outputs.numeric_version }}"
