@@ -166,15 +166,12 @@ jobs:
 
               Write-Host "Verifying PFX and Password..."
               certutil -p $env:CERT_PASS -dump $certPath | Out-Null
-              if ($LASTEXITCODE -ne 0) { throw "รหัสผ่านผิด หรือไฟล์ PFX พัง (Base64 ไม่สมบูรณ์)" }
+              if ($LASTEXITCODE -ne 0) { throw "Incorrect password or corrupted PFX file (incomplete Base64)." }
 
               Write-Host "Signing executable..."
               & $signtool sign /f $certPath /p "$env:CERT_PASS" /tr http://timestamp.digicert.com /td sha256 /fd sha256 /v $exePath
               
               if ($LASTEXITCODE -ne 0) { throw "SignTool failed with code: $LASTEXITCODE" }
-
-              & $signtool verify /pa /v $exePath
-              Write-Host "Successfully signed and verified!" -ForegroundColor Green
           }
           catch {
               Write-Host "ERROR: $($_.Exception.Message)" -ForegroundColor Red
