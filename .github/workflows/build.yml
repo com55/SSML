@@ -155,32 +155,25 @@ jobs:
           $certPath = Join-Path $env:RUNNER_TEMP "cert.pfx"
           $exePath = "build/main.exe"
 
-          # 1. หา Signtool x64
           $signtool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin\" -Filter signtool.exe -Recurse | 
                       Where-Object { $_.FullName -match "x64" } | 
-                      Sort-Object -Property LastWriteTime -Descending | 
-                      Select-Object -First 1 -ExpandProperty FullName
-
-          if (-not $signtool) { throw "signtool.exe not found" }
+                      Sort-Object -Property LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName
 
           try {
-              # 2. Decode Cert
-              Write-Host "Decoding Certificate..."
-              $certBytes = [System.Convert]::FromBase64String($env:CERT_DATA.Trim())
+              $cleanBase64 = $env:CERT_DATA -replace '\s',''
+              $certBytes = [System.Convert]::FromBase64String($cleanBase64)
               [System.IO.File]::WriteAllBytes($certPath, $certBytes)
-              
-              # 3. Sign
-              Write-Host "Signing executable: $exePath"
-              & $signtool sign /f $certPath /p $env:CERT_PASS /tr http://timestamp.digicert.com /td sha256 /fd sha256 /v $exePath
-              
-              if ($LASTEXITCODE -ne 0) { throw "SignTool failed with the code: $LASTEXITCODE" }
 
-              # 4. Verify
-              Write-Host "Verifying..."
+              Write-Host "Verifying PFX and Password..."
+              certutil -p $env:CERT_PASS -dump $certPath | Out-Null
+              if ($LASTEXITCODE -ne 0) { throw "รหัสผ่านผิด หรือไฟล์ PFX พัง (Base64 ไม่สมบูรณ์)" }
+
+              Write-Host "Signing executable..."
+              & $signtool sign /f $certPath /p "$env:CERT_PASS" /tr http://timestamp.digicert.com /td sha256 /fd sha256 /v $exePath
+              
+              if ($LASTEXITCODE -ne 0) { throw "SignTool failed with code: $LASTEXITCODE" }
+
               & $signtool verify /pa /v $exePath
-              
-              if ($LASTEXITCODE -ne 0) { throw "Verification failed" }
-
               Write-Host "Successfully signed and verified!" -ForegroundColor Green
           }
           catch {
